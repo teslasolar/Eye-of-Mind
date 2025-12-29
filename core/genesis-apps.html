@@ -1,0 +1,482 @@
+<!--
+@udt file/1.0
+uuid: eom-core-genesis-apps-001
+version: 0.1.0
+path: /core/genesis-apps.html
+deps: [oracle.js]
+tags: [consciousness, generative, llm, apps]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Genesis Apps | Eye of Mind</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#0f0;--bg:#0a0a0f;--panel:#111;--border:#222}
+body{background:var(--bg);color:#fff;font-family:system-ui;min-height:100vh;display:flex}
+.sidebar{width:280px;background:var(--panel);border-right:1px solid var(--border);
+  padding:1rem;display:flex;flex-direction:column;gap:1rem;overflow-y:auto}
+.sidebar h1{font-size:1rem;color:var(--primary);display:flex;align-items:center;gap:0.5rem}
+.sidebar h2{font-size:0.75rem;color:#666;text-transform:uppercase;margin-top:1rem}
+.app-types{display:flex;flex-direction:column;gap:0.5rem}
+.app-type{background:#1a1a1a;border:1px solid var(--border);padding:0.75rem;
+  border-radius:4px;cursor:pointer;transition:all 0.2s}
+.app-type:hover{border-color:var(--primary);background:#1a1a2a}
+.app-type.selected{border-color:var(--primary);background:rgba(0,255,0,0.1)}
+.app-type h3{font-size:0.9rem;margin-bottom:0.25rem}
+.app-type p{font-size:0.7rem;color:#666}
+.controls{margin-top:auto;display:flex;flex-direction:column;gap:0.5rem}
+.controls button{background:var(--primary);border:none;color:#000;padding:0.75rem;
+  font-weight:bold;cursor:pointer;border-radius:4px;font-size:0.9rem}
+.controls button:hover{filter:brightness(1.2)}
+.controls button.secondary{background:transparent;border:1px solid var(--border);color:#888}
+.controls button.secondary:hover{border-color:var(--primary);color:var(--primary)}
+.main{flex:1;display:flex;flex-direction:column}
+.toolbar{background:var(--panel);border-bottom:1px solid var(--border);padding:0.5rem 1rem;
+  display:flex;gap:1rem;align-items:center;font-size:0.8rem}
+.toolbar .status{margin-left:auto;color:#666;font-family:monospace}
+.preview{flex:1;position:relative;overflow:hidden}
+.preview iframe{width:100%;height:100%;border:none;background:#fff}
+.code-panel{height:300px;background:#0d0d0d;border-top:1px solid var(--border);display:none}
+.code-panel.visible{display:block}
+.code-panel pre{height:100%;overflow:auto;padding:1rem;font-size:0.75rem;
+  font-family:'Fira Code',monospace;color:#888}
+.loading{position:absolute;inset:0;background:rgba(0,0,0,0.9);display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:1rem}
+.loading.hidden{display:none}
+.loading-spinner{width:40px;height:40px;border:3px solid var(--border);
+  border-top-color:var(--primary);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.features{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem}
+.feature{font-size:0.65rem;background:#222;padding:2px 6px;border-radius:3px;color:#888}
+.entropy-display{font-family:monospace;font-size:0.7rem;color:#0a0;padding:0.5rem;
+  background:#0a0a0a;border-radius:4px;margin-top:0.5rem}
+</style>
+</head>
+<body>
+<div class="sidebar">
+<h1>🌀 Genesis Apps</h1>
+<p style="font-size:0.75rem;color:#666">Entropy-driven application generator</p>
+
+<div class="entropy-display">
+entropy: <span id="entropy">0.0000</span><br>
+pool: <span id="pool">████████████████</span>
+</div>
+
+<h2>App Type</h2>
+<div class="app-types" id="app-types"></div>
+
+<h2>Complexity</h2>
+<input type="range" id="complexity" min="1" max="5" value="3" style="width:100%">
+<div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#666">
+<span>Simple</span><span>Complex</span>
+</div>
+
+<div class="controls">
+<button id="generate">⚡ GENERATE APP</button>
+<button id="random" class="secondary">🎲 RANDOM TYPE</button>
+<button id="toggle-code" class="secondary">{ } VIEW CODE</button>
+<button id="export" class="secondary">📦 EXPORT</button>
+</div>
+
+<div style="font-size:0.65rem;color:#444;margin-top:1rem">
+Model: <span id="model-status">loading...</span>
+</div>
+</div>
+
+<div class="main">
+<div class="toolbar">
+<span id="app-name">No app generated</span>
+<span id="app-desc" style="color:#666"></span>
+<span class="status">
+<span id="gen-time">—</span> |
+<span id="token-count">0</span> tokens
+</span>
+</div>
+<div class="preview">
+<iframe id="preview"></iframe>
+<div class="loading hidden" id="loading">
+<div class="loading-spinner"></div>
+<div id="loading-text" style="color:#0f0">Generating...</div>
+</div>
+</div>
+<div class="code-panel" id="code-panel">
+<pre id="code-display"></pre>
+</div>
+</div>
+
+<script type="module">
+import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+
+// App type definitions
+const appTypes = [
+  {
+    id: 'todo',
+    name: 'Todo App',
+    desc: 'Task management with lists',
+    features: ['add/remove tasks', 'mark complete', 'filters', 'local storage'],
+    basePrompt: 'Create a todo list application'
+  },
+  {
+    id: 'calculator',
+    name: 'Calculator',
+    desc: 'Mathematical operations',
+    features: ['basic ops', 'memory', 'history', 'keyboard input'],
+    basePrompt: 'Create a calculator application'
+  },
+  {
+    id: 'notes',
+    name: 'Notes App',
+    desc: 'Text notes with search',
+    features: ['create notes', 'edit/delete', 'search', 'categories'],
+    basePrompt: 'Create a notes application'
+  },
+  {
+    id: 'timer',
+    name: 'Timer/Stopwatch',
+    desc: 'Time tracking tools',
+    features: ['countdown', 'stopwatch', 'laps', 'alarms'],
+    basePrompt: 'Create a timer and stopwatch application'
+  },
+  {
+    id: 'weather',
+    name: 'Weather Dashboard',
+    desc: 'Simulated weather display',
+    features: ['current conditions', 'forecast', 'locations', 'animations'],
+    basePrompt: 'Create a weather dashboard with simulated data'
+  },
+  {
+    id: 'game',
+    name: 'Mini Game',
+    desc: 'Simple interactive game',
+    features: ['game loop', 'score', 'controls', 'win/lose states'],
+    basePrompt: 'Create a simple browser game'
+  },
+  {
+    id: 'dashboard',
+    name: 'Data Dashboard',
+    desc: 'Charts and metrics',
+    features: ['charts', 'stats cards', 'filters', 'real-time updates'],
+    basePrompt: 'Create a data dashboard with charts'
+  },
+  {
+    id: 'chat',
+    name: 'Chat Interface',
+    desc: 'Messaging UI',
+    features: ['message list', 'input', 'timestamps', 'typing indicator'],
+    basePrompt: 'Create a chat interface application'
+  },
+  {
+    id: 'gallery',
+    name: 'Image Gallery',
+    desc: 'Photo grid with lightbox',
+    features: ['grid layout', 'lightbox', 'navigation', 'lazy load'],
+    basePrompt: 'Create an image gallery with lightbox'
+  },
+  {
+    id: 'music',
+    name: 'Music Player',
+    desc: 'Audio player UI',
+    features: ['play/pause', 'progress bar', 'playlist', 'visualizer'],
+    basePrompt: 'Create a music player interface'
+  },
+  {
+    id: 'kanban',
+    name: 'Kanban Board',
+    desc: 'Drag-drop task board',
+    features: ['columns', 'cards', 'drag-drop', 'labels'],
+    basePrompt: 'Create a kanban board application'
+  },
+  {
+    id: 'quiz',
+    name: 'Quiz Game',
+    desc: 'Question and answer game',
+    features: ['questions', 'scoring', 'timer', 'results'],
+    basePrompt: 'Create a quiz game application'
+  }
+];
+
+// UI component library for generation
+const components = {
+  button: (label, action) => `<button onclick="${action}">${label}</button>`,
+  input: (placeholder, id) => `<input type="text" placeholder="${placeholder}" id="${id}">`,
+  card: (title, content) => `<div class="card"><h3>${title}</h3><p>${content}</p></div>`,
+  list: (items) => `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`,
+  grid: (cols, items) => `<div class="grid" style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1rem">${items}</div>`
+};
+
+// Color palettes
+const palettes = [
+  { bg: '#1a1a2e', primary: '#e94560', secondary: '#0f3460', text: '#fff' },
+  { bg: '#0d1117', primary: '#58a6ff', secondary: '#21262d', text: '#c9d1d9' },
+  { bg: '#1e1e1e', primary: '#dcdcaa', secondary: '#264f78', text: '#d4d4d4' },
+  { bg: '#282a36', primary: '#ff79c6', secondary: '#44475a', text: '#f8f8f2' },
+  { bg: '#fdf6e3', primary: '#268bd2', secondary: '#eee8d5', text: '#657b83' },
+  { bg: '#2d2d2d', primary: '#f92672', secondary: '#3e3e3e', text: '#f8f8f2' },
+  { bg: '#1b1b1b', primary: '#98c379', secondary: '#2c2c2c', text: '#abb2bf' },
+  { bg: '#0a0a0f', primary: '#00ff00', secondary: '#111', text: '#0f0' }
+];
+
+let engine = null;
+let selectedType = null;
+let generatedCode = '';
+let totalTokens = 0;
+
+// Entropy
+let entropyPool = [];
+function harvestEntropy() {
+  let acc = 0;
+  for (let i = 0; i < 200; i++) acc += (performance.now() * 1000000) % 1;
+  const e = (acc/200 + (Date.now() % 1000)/1000) / 2;
+  entropyPool.push(e);
+  if (entropyPool.length > 50) entropyPool.shift();
+  document.getElementById('entropy').textContent = e.toFixed(4);
+  document.getElementById('pool').textContent = entropyPool.map(v => v > 0.5 ? '█' : '░').join('');
+  return e;
+}
+
+function entropyPick(arr) {
+  return arr[Math.floor(harvestEntropy() * arr.length)];
+}
+
+function entropyInt(min, max) {
+  return Math.floor(min + harvestEntropy() * (max - min + 1));
+}
+
+// Render app types
+function renderAppTypes() {
+  const container = document.getElementById('app-types');
+  container.innerHTML = appTypes.map(app => `
+    <div class="app-type" data-id="${app.id}">
+      <h3>${app.name}</h3>
+      <p>${app.desc}</p>
+      <div class="features">${app.features.slice(0, 3).map(f => `<span class="feature">${f}</span>`).join('')}</div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.app-type').forEach(el => {
+    el.onclick = () => {
+      container.querySelectorAll('.app-type').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedType = appTypes.find(a => a.id === el.dataset.id);
+    };
+  });
+}
+
+// Load model
+async function loadModel() {
+  const status = document.getElementById('model-status');
+  try {
+    engine = await webllm.CreateMLCEngine('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
+      initProgressCallback: (p) => { status.textContent = p.text || 'loading...'; }
+    });
+    status.textContent = '✓ ready';
+    status.style.color = '#0f0';
+  } catch (e) {
+    status.textContent = 'failed (templates only)';
+    status.style.color = '#f90';
+  }
+}
+
+// Generate app
+async function generateApp() {
+  const type = selectedType || entropyPick(appTypes);
+  const complexity = parseInt(document.getElementById('complexity').value);
+  const palette = entropyPick(palettes);
+
+  const loading = document.getElementById('loading');
+  const loadingText = document.getElementById('loading-text');
+  loading.classList.remove('hidden');
+  loadingText.textContent = `Generating ${type.name}...`;
+
+  const startTime = performance.now();
+  totalTokens = 0;
+
+  // Build feature set based on complexity
+  const numFeatures = Math.min(complexity + 1, type.features.length);
+  const features = [];
+  const available = [...type.features];
+  for (let i = 0; i < numFeatures; i++) {
+    const idx = Math.floor(harvestEntropy() * available.length);
+    features.push(available.splice(idx, 1)[0]);
+  }
+
+  // Entropy-driven style variations
+  const borderRadius = entropyInt(0, 16);
+  const fontSize = 14 + entropyInt(0, 4);
+  const spacing = 8 + entropyInt(0, 16);
+  const shadow = harvestEntropy() > 0.5;
+  const animations = harvestEntropy() > 0.4;
+
+  // Generate with LLM
+  let appCode = '';
+  if (engine) {
+    const prompt = `${type.basePrompt} with these features: ${features.join(', ')}.
+
+Requirements:
+- Single HTML file with embedded CSS and JavaScript
+- Use these colors: background ${palette.bg}, primary ${palette.primary}, text ${palette.text}
+- Border radius: ${borderRadius}px, font-size: ${fontSize}px
+- ${animations ? 'Include smooth CSS animations' : 'Keep it simple, no animations'}
+- Make it fully functional
+- Use modern ES6+ JavaScript
+- Keep code clean and minimal
+
+Return ONLY the HTML code, nothing else. Start with <!DOCTYPE html>`;
+
+    try {
+      loadingText.textContent = 'LLM generating code...';
+      const response = await engine.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.7
+      });
+      appCode = response.choices[0]?.message?.content || '';
+      totalTokens = response.usage?.total_tokens || 0;
+
+      // Clean up response
+      appCode = appCode.replace(/```html\n?/g, '').replace(/```\n?/g, '').trim();
+      if (!appCode.startsWith('<!DOCTYPE')) {
+        appCode = appCode.substring(appCode.indexOf('<!DOCTYPE'));
+      }
+    } catch (e) {
+      console.error('LLM error:', e);
+      appCode = generateFallbackApp(type, palette, features);
+    }
+  } else {
+    appCode = generateFallbackApp(type, palette, features);
+  }
+
+  generatedCode = appCode;
+
+  // Render preview
+  const iframe = document.getElementById('preview');
+  iframe.srcdoc = appCode;
+
+  // Update UI
+  document.getElementById('app-name').textContent = type.name;
+  document.getElementById('app-desc').textContent = features.join(' • ');
+  document.getElementById('gen-time').textContent = ((performance.now() - startTime) / 1000).toFixed(1) + 's';
+  document.getElementById('token-count').textContent = totalTokens;
+  document.getElementById('code-display').textContent = appCode;
+
+  loading.classList.add('hidden');
+}
+
+// Fallback template generator
+function generateFallbackApp(type, palette, features) {
+  const templates = {
+    todo: `<!DOCTYPE html><html><head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:${palette.bg};color:${palette.text};font-family:system-ui;padding:2rem;min-height:100vh}
+.container{max-width:500px;margin:0 auto}
+h1{color:${palette.primary};margin-bottom:1rem}
+.input-row{display:flex;gap:0.5rem;margin-bottom:1rem}
+input{flex:1;padding:0.75rem;border:1px solid ${palette.secondary};background:${palette.secondary};color:${palette.text};border-radius:4px}
+button{padding:0.75rem 1.5rem;background:${palette.primary};border:none;color:${palette.bg};cursor:pointer;border-radius:4px;font-weight:bold}
+ul{list-style:none}
+li{padding:0.75rem;background:${palette.secondary};margin-bottom:0.5rem;border-radius:4px;display:flex;align-items:center;gap:0.5rem}
+li.done{opacity:0.5;text-decoration:line-through}
+li button{padding:0.25rem 0.5rem;font-size:0.8rem}
+</style></head><body>
+<div class="container">
+<h1>Todo List</h1>
+<div class="input-row"><input id="input" placeholder="Add task..."><button onclick="addTodo()">Add</button></div>
+<ul id="list"></ul>
+</div>
+<script>
+let todos=[];
+function render(){document.getElementById('list').innerHTML=todos.map((t,i)=>\`<li class="\${t.done?'done':''}"><input type="checkbox" \${t.done?'checked':''} onchange="toggle(\${i})"><span>\${t.text}</span><button onclick="remove(\${i})">×</button></li>\`).join('')}
+function addTodo(){const input=document.getElementById('input');if(input.value.trim()){todos.push({text:input.value,done:false});input.value='';render()}}
+function toggle(i){todos[i].done=!todos[i].done;render()}
+function remove(i){todos.splice(i,1);render()}
+document.getElementById('input').onkeypress=e=>{if(e.key==='Enter')addTodo()}
+</script></body></html>`,
+
+    calculator: `<!DOCTYPE html><html><head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:${palette.bg};color:${palette.text};font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.calc{background:${palette.secondary};padding:1.5rem;border-radius:12px;width:280px}
+.display{background:${palette.bg};padding:1rem;text-align:right;font-size:2rem;border-radius:8px;margin-bottom:1rem;min-height:60px;word-break:break-all}
+.buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem}
+button{padding:1rem;font-size:1.2rem;border:none;border-radius:8px;cursor:pointer;background:${palette.bg};color:${palette.text}}
+button:hover{filter:brightness(1.2)}
+button.op{background:${palette.primary};color:${palette.bg}}
+button.eq{background:${palette.primary};color:${palette.bg}}
+</style></head><body>
+<div class="calc">
+<div class="display" id="display">0</div>
+<div class="buttons">
+<button onclick="clearDisplay()">C</button><button onclick="append('(')">(</button><button onclick="append(')')">)</button><button class="op" onclick="append('/')">÷</button>
+<button onclick="append('7')">7</button><button onclick="append('8')">8</button><button onclick="append('9')">9</button><button class="op" onclick="append('*')">×</button>
+<button onclick="append('4')">4</button><button onclick="append('5')">5</button><button onclick="append('6')">6</button><button class="op" onclick="append('-')">−</button>
+<button onclick="append('1')">1</button><button onclick="append('2')">2</button><button onclick="append('3')">3</button><button class="op" onclick="append('+')">+</button>
+<button onclick="append('0')">0</button><button onclick="append('.')">.</button><button onclick="backspace()">←</button><button class="eq" onclick="calculate()">=</button>
+</div></div>
+<script>
+let expr='';
+function updateDisplay(){document.getElementById('display').textContent=expr||'0'}
+function append(v){expr+=v;updateDisplay()}
+function clearDisplay(){expr='';updateDisplay()}
+function backspace(){expr=expr.slice(0,-1);updateDisplay()}
+function calculate(){try{expr=String(eval(expr))}catch{expr='Error'}updateDisplay()}
+</script></body></html>`,
+
+    game: `<!DOCTYPE html><html><head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:${palette.bg};color:${palette.text};font-family:system-ui;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
+h1{color:${palette.primary};margin-bottom:1rem}
+canvas{background:${palette.secondary};border-radius:8px}
+.score{font-size:1.5rem;margin-top:1rem}
+.instructions{font-size:0.8rem;color:#888;margin-top:0.5rem}
+</style></head><body>
+<h1>Catch Game</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div class="score">Score: <span id="score">0</span></div>
+<div class="instructions">Move mouse to catch falling objects</div>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let paddle={x:175,w:50,h:10},balls=[],score=0;
+function spawnBall(){balls.push({x:Math.random()*380+10,y:0,r:10,speed:2+Math.random()*3})}
+function draw(){ctx.clearRect(0,0,400,400);
+ctx.fillStyle='${palette.primary}';ctx.fillRect(paddle.x,380,paddle.w,paddle.h);
+ctx.fillStyle='${palette.text}';balls.forEach(b=>{ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill()})}
+function update(){balls.forEach(b=>{b.y+=b.speed});
+balls=balls.filter(b=>{if(b.y>380&&b.x>paddle.x&&b.x<paddle.x+paddle.w){score++;document.getElementById('score').textContent=score;return false}return b.y<420});
+if(Math.random()<0.02)spawnBall()}
+canvas.onmousemove=e=>{const rect=canvas.getBoundingClientRect();paddle.x=e.clientX-rect.left-25}
+setInterval(()=>{update();draw()},16)
+</script></body></html>`
+  };
+
+  return templates[type.id] || templates.todo;
+}
+
+// Event listeners
+document.getElementById('generate').onclick = generateApp;
+document.getElementById('random').onclick = () => {
+  document.querySelectorAll('.app-type').forEach(e => e.classList.remove('selected'));
+  selectedType = null;
+  generateApp();
+};
+document.getElementById('toggle-code').onclick = () => {
+  document.getElementById('code-panel').classList.toggle('visible');
+};
+document.getElementById('export').onclick = () => {
+  if (!generatedCode) return;
+  const blob = new Blob([generatedCode], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `genesis-app-${Date.now()}.html`;
+  a.click();
+};
+
+// Init
+setInterval(harvestEntropy, 100);
+renderAppTypes();
+loadModel();
+</script>
+</body>
+</html>

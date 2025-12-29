@@ -1,0 +1,313 @@
+<!--
+@udt file/1.0
+uuid: eom-core-genesis-001
+version: 0.1.0
+path: /core/genesis.html
+deps: [oracle.js]
+tags: [consciousness, generative, llm]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Genesis Engine | Eye of Mind</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;color:#fff;font-family:system-ui;min-height:100vh}
+.toolbar{position:fixed;top:0;left:0;right:0;background:#111;border-bottom:1px solid #222;
+  padding:0.5rem 1rem;display:flex;gap:1rem;align-items:center;z-index:100}
+.toolbar button{background:#1a1a1a;border:1px solid #333;color:#0f0;padding:6px 12px;
+  font-size:0.8rem;cursor:pointer;border-radius:3px}
+.toolbar button:hover{background:#0f0;color:#000}
+.toolbar .status{margin-left:auto;font-size:0.7rem;color:#666;font-family:monospace}
+.entropy-bar{width:100px;height:8px;background:#222;border-radius:4px;overflow:hidden}
+.entropy-fill{height:100%;background:linear-gradient(90deg,#0f0,#ff0,#f00);transition:width 0.2s}
+.canvas{margin-top:50px;padding:2rem;min-height:calc(100vh - 50px)}
+.generated-page{max-width:1000px;margin:0 auto;background:#111;border-radius:8px;
+  overflow:hidden;box-shadow:0 0 40px rgba(0,255,0,0.1)}
+.gen-header{padding:2rem;text-align:center}
+.gen-hero{padding:3rem 2rem;position:relative;overflow:hidden}
+.gen-section{padding:2rem;border-top:1px solid #222}
+.gen-grid{display:grid;gap:1rem}
+.gen-card{background:rgba(255,255,255,0.03);padding:1.5rem;border-radius:6px;
+  border:1px solid rgba(255,255,255,0.05)}
+.gen-footer{padding:1.5rem;text-align:center;border-top:1px solid #222;font-size:0.8rem;color:#444}
+.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;
+  align-items:center;justify-content:center;z-index:200}
+.loading-overlay.hidden{display:none}
+.loading-text{color:#0f0;font-family:monospace;text-align:center}
+.regen-btn{position:absolute;top:0.5rem;right:0.5rem;background:rgba(0,0,0,0.5);
+  border:1px solid #333;color:#666;padding:4px 8px;font-size:0.7rem;cursor:pointer;
+  border-radius:3px;opacity:0;transition:opacity 0.2s}
+.gen-section:hover .regen-btn,.gen-hero:hover .regen-btn,.gen-header:hover .regen-btn{opacity:1}
+.regen-btn:hover{color:#0f0;border-color:#0f0}
+</style>
+</head>
+<body>
+<div class="toolbar">
+<button id="generate">⚡ GENERATE</button>
+<button id="mutate">🧬 MUTATE</button>
+<button id="export">📄 EXPORT</button>
+<div class="entropy-bar"><div class="entropy-fill" id="entropy-fill"></div></div>
+<div class="status">
+<span id="model-status">loading model...</span> |
+entropy: <span id="entropy-val">0.000</span>
+</div>
+</div>
+
+<div class="canvas">
+<div class="generated-page" id="page">
+<div class="gen-header" id="header">
+<p style="color:#444">Click GENERATE to create a page from entropy</p>
+</div>
+</div>
+</div>
+
+<div class="loading-overlay hidden" id="loading">
+<div class="loading-text">
+<div id="loading-msg">Channeling entropy...</div>
+<div style="margin-top:1rem" id="loading-detail"></div>
+</div>
+</div>
+
+<script type="module">
+import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+
+// Entropy system
+let entropyPool = 0;
+function harvestEntropy() {
+  let acc = 0;
+  for (let i = 0; i < 500; i++) {
+    acc += (performance.now() * 1000000) % 1;
+  }
+  const drift = (performance.now() * 1000) % 1;
+  const seed = (acc/500 + drift + (Date.now() % 1000) / 1000) / 3;
+  entropyPool = seed;
+  document.getElementById('entropy-fill').style.width = (seed * 100) + '%';
+  document.getElementById('entropy-val').textContent = seed.toFixed(4);
+  return seed;
+}
+
+function entropyPick(options) {
+  const e = harvestEntropy();
+  return options[Math.floor(e * options.length)];
+}
+
+function entropyRange(min, max) {
+  const e = harvestEntropy();
+  return Math.floor(min + e * (max - min));
+}
+
+function entropyColor() {
+  const e = harvestEntropy();
+  const h = Math.floor(e * 360);
+  const s = 40 + Math.floor(harvestEntropy() * 40);
+  const l = 30 + Math.floor(harvestEntropy() * 30);
+  return `hsl(${h},${s}%,${l}%)`;
+}
+
+// LLM Engine
+let engine = null;
+const statusEl = document.getElementById('model-status');
+
+async function loadModel() {
+  try {
+    engine = await webllm.CreateMLCEngine('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
+      initProgressCallback: (p) => {
+        statusEl.textContent = p.text || 'loading...';
+      }
+    });
+    statusEl.textContent = '✓ ready';
+    statusEl.style.color = '#0f0';
+  } catch (e) {
+    statusEl.textContent = 'model failed (entropy only)';
+    statusEl.style.color = '#f90';
+  }
+}
+
+async function llmGenerate(prompt, maxTokens = 100) {
+  if (!engine) return entropyPick(['[No model]', '[Entropy mode]', '[Pure chaos]']);
+  try {
+    const response = await engine.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: maxTokens,
+      temperature: 0.8
+    });
+    return response.choices[0]?.message?.content || '';
+  } catch (e) {
+    return '[Generation failed]';
+  }
+}
+
+// Page generation schema
+const pageTypes = ['landing', 'portfolio', 'blog', 'product', 'manifesto', 'oracle'];
+const themes = ['cosmic', 'nature', 'tech', 'ancient', 'minimal', 'chaotic'];
+const moods = ['mysterious', 'inspiring', 'dark', 'hopeful', 'contemplative', 'urgent'];
+
+async function generatePage() {
+  const loading = document.getElementById('loading');
+  const loadingMsg = document.getElementById('loading-msg');
+  const loadingDetail = document.getElementById('loading-detail');
+  loading.classList.remove('hidden');
+
+  const pageType = entropyPick(pageTypes);
+  const theme = entropyPick(themes);
+  const mood = entropyPick(moods);
+  const primaryColor = entropyColor();
+  const accentColor = entropyColor();
+  const numSections = entropyRange(2, 5);
+
+  loadingMsg.textContent = `Creating ${mood} ${theme} ${pageType}...`;
+
+  // Generate header
+  loadingDetail.textContent = 'Generating header...';
+  const headerPrompt = `Generate a short website header for a ${mood} ${theme} ${pageType} page. Return ONLY: a title (max 5 words) and tagline (max 10 words), separated by |`;
+  const headerText = await llmGenerate(headerPrompt, 40);
+  const [title, tagline] = headerText.split('|').map(s => s?.trim() || '');
+
+  // Generate hero
+  loadingDetail.textContent = 'Generating hero section...';
+  const heroPrompt = `Write a compelling hero section for a ${mood} ${theme} website. Return ONLY 2 sentences, mysterious and evocative.`;
+  const heroText = await llmGenerate(heroPrompt, 60);
+
+  // Generate sections
+  const sections = [];
+  for (let i = 0; i < numSections; i++) {
+    loadingDetail.textContent = `Generating section ${i+1}/${numSections}...`;
+    const sectionType = entropyPick(['features', 'about', 'testimonial', 'cta', 'philosophy']);
+    const numCards = entropyRange(2, 4);
+
+    const sectionPrompt = `Generate a ${sectionType} section for a ${mood} ${theme} site. Return a heading (max 4 words) then | then ${numCards} card titles separated by |`;
+    const sectionText = await llmGenerate(sectionPrompt, 80);
+    const parts = sectionText.split('|').map(s => s?.trim()).filter(Boolean);
+
+    sections.push({
+      type: sectionType,
+      heading: parts[0] || sectionType,
+      cards: parts.slice(1, numCards + 1),
+      columns: numCards,
+      bg: harvestEntropy() > 0.5 ? 'rgba(255,255,255,0.02)' : 'transparent'
+    });
+  }
+
+  // Render page
+  loadingDetail.textContent = 'Rendering...';
+  const pageEl = document.getElementById('page');
+
+  let html = `
+    <div class="gen-header" style="background:linear-gradient(135deg,${primaryColor},${accentColor})">
+      <button class="regen-btn" onclick="regenSection('header')">↻</button>
+      <h1 style="font-size:2.5rem;margin-bottom:0.5rem">${title || 'Untitled'}</h1>
+      <p style="opacity:0.8">${tagline || ''}</p>
+    </div>
+    <div class="gen-hero" style="background:${primaryColor}22">
+      <button class="regen-btn" onclick="regenSection('hero')">↻</button>
+      <p style="font-size:1.3rem;line-height:1.8;max-width:600px;margin:0 auto;text-align:center">
+        ${heroText || 'Welcome to the void.'}
+      </p>
+    </div>
+  `;
+
+  sections.forEach((sec, i) => {
+    html += `
+      <div class="gen-section" style="background:${sec.bg}" data-section="${i}">
+        <button class="regen-btn" onclick="regenSection(${i})">↻</button>
+        <h2 style="margin-bottom:1.5rem;color:${accentColor}">${sec.heading}</h2>
+        <div class="gen-grid" style="grid-template-columns:repeat(${sec.columns},1fr)">
+          ${sec.cards.map(card => `
+            <div class="gen-card">
+              <h3 style="color:${primaryColor};margin-bottom:0.5rem">${card}</h3>
+              <p style="color:#888;font-size:0.9rem">Generated from entropy ${harvestEntropy().toFixed(4)}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  });
+
+  html += `
+    <div class="gen-footer">
+      Generated via entropy • ${pageType} • ${theme} • ${mood} • ${new Date().toLocaleTimeString()}
+    </div>
+  `;
+
+  pageEl.innerHTML = html;
+  loading.classList.add('hidden');
+
+  // Store state for mutations
+  window.pageState = { pageType, theme, mood, primaryColor, accentColor, sections };
+}
+
+// Mutate - small entropy changes
+async function mutatePage() {
+  if (!window.pageState) return generatePage();
+
+  const loading = document.getElementById('loading');
+  loading.classList.remove('hidden');
+  document.getElementById('loading-msg').textContent = 'Mutating...';
+
+  // Shift colors slightly
+  window.pageState.primaryColor = entropyColor();
+
+  // Regenerate one random section
+  const idx = entropyRange(0, window.pageState.sections.length);
+  const sec = window.pageState.sections[idx];
+
+  const prompt = `Regenerate: ${sec.heading}. Give new heading (4 words) | ${sec.cards.length} new card titles |`;
+  const text = await llmGenerate(prompt, 60);
+  const parts = text.split('|').map(s => s?.trim()).filter(Boolean);
+
+  sec.heading = parts[0] || sec.heading;
+  sec.cards = parts.slice(1, sec.cards.length + 1);
+
+  // Re-render
+  await generatePage();
+}
+
+// Export HTML
+function exportPage() {
+  const pageHtml = document.getElementById('page').innerHTML;
+  const fullHtml = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Generated Page</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;color:#fff;font-family:system-ui}
+.gen-header{padding:2rem;text-align:center}
+.gen-hero{padding:3rem 2rem}
+.gen-section{padding:2rem;border-top:1px solid #222}
+.gen-grid{display:grid;gap:1rem}
+.gen-card{background:rgba(255,255,255,0.03);padding:1.5rem;border-radius:6px}
+.gen-footer{padding:1.5rem;text-align:center;border-top:1px solid #222;font-size:0.8rem;color:#444}
+.regen-btn{display:none}
+</style></head><body>
+<div style="max-width:1000px;margin:0 auto;background:#111">${pageHtml}</div>
+</body></html>`;
+
+  const blob = new Blob([fullHtml], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `genesis-${Date.now()}.html`;
+  a.click();
+}
+
+// Section regeneration
+window.regenSection = async (idx) => {
+  if (!window.pageState) return;
+  // For now, just mutate
+  mutatePage();
+};
+
+// Event listeners
+document.getElementById('generate').onclick = generatePage;
+document.getElementById('mutate').onclick = mutatePage;
+document.getElementById('export').onclick = exportPage;
+
+// Continuous entropy harvest
+setInterval(harvestEntropy, 100);
+
+// Init
+loadModel();
+</script>
+</body>
+</html>

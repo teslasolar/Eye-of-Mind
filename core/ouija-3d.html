@@ -1,0 +1,242 @@
+<!--
+@udt file/1.0
+uuid: eom-core-ouija3d-001
+version: 0.1.0
+tokens: 250
+path: /core/ouija-3d.html
+parent: /core
+deps: [oracle.js]
+tags: [consciousness, 3d, divination]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ouija 3D | Eye of Mind</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;overflow:hidden;font-family:system-ui}
+canvas{display:block}
+#message{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
+  font-size:2rem;font-family:'Times New Roman',serif;letter-spacing:0.3em;
+  color:#d4af37;text-shadow:0 0 20px rgba(212,175,55,0.5);min-width:300px;text-align:center}
+#status{position:fixed;top:20px;right:20px;font-size:12px;color:#666;font-family:monospace}
+#nav{position:fixed;bottom:20px;left:20px}
+#nav a{color:#444;text-decoration:none;font-size:12px}
+#clear{position:fixed;bottom:40px;right:20px;background:none;border:1px solid #333;
+  color:#666;padding:6px 12px;cursor:pointer;font-size:12px}
+#clear:hover{border-color:#666;color:#999}
+</style>
+</head>
+<body>
+<div id="message"></div>
+<div id="status">initializing...</div>
+<button id="clear">clear</button>
+<div id="nav"><a href="./">← Core</a></div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { Oracle } from './oracle.js';
+
+const oracle = new Oracle();
+let message = '';
+let targetPos = {x:0, y:0};
+let currentPos = {x:0, y:0};
+let dwellTime = 0;
+let lastSymbol = null;
+let selecting = false;
+
+// Board layout
+const symbols = [
+  {char:'A',x:-2.5,y:1},{char:'B',x:-2,y:1},{char:'C',x:-1.5,y:1},{char:'D',x:-1,y:1},
+  {char:'E',x:-0.5,y:1},{char:'F',x:0,y:1},{char:'G',x:0.5,y:1},{char:'H',x:1,y:1},
+  {char:'I',x:1.5,y:1},{char:'J',x:2,y:1},{char:'K',x:2.5,y:1},{char:'L',x:-2.5,y:0.3},
+  {char:'M',x:-2,y:0.3},{char:'N',x:-1.5,y:0.3},{char:'O',x:-1,y:0.3},{char:'P',x:-0.5,y:0.3},
+  {char:'Q',x:0,y:0.3},{char:'R',x:0.5,y:0.3},{char:'S',x:1,y:0.3},{char:'T',x:1.5,y:0.3},
+  {char:'U',x:2,y:0.3},{char:'V',x:2.5,y:0.3},{char:'W',x:-2,y:-0.4},{char:'X',x:-1.5,y:-0.4},
+  {char:'Y',x:-1,y:-0.4},{char:'Z',x:-0.5,y:-0.4},{char:'0',x:0.5,y:-0.4},{char:'1',x:1,y:-0.4},
+  {char:'2',x:1.5,y:-0.4},{char:'3',x:2,y:-0.4},{char:'4',x:-2.5,y:-1.1},{char:'5',x:-2,y:-1.1},
+  {char:'6',x:-1.5,y:-1.1},{char:'7',x:-1,y:-1.1},{char:'8',x:-0.5,y:-1.1},{char:'9',x:0,y:-1.1},
+  {char:'YES',x:1.5,y:-1.1},{char:'NO',x:2.5,y:-1.1},{char:' ',x:0,y:-1.8}
+];
+
+// Scene
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0a0a0f, 5, 15);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 4, 5);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// Board
+const boardGeo = new THREE.BoxGeometry(7, 0.2, 5);
+const boardMat = new THREE.MeshStandardMaterial({color:0x2a1810,roughness:0.8});
+const board = new THREE.Mesh(boardGeo, boardMat);
+board.position.y = -0.1;
+scene.add(board);
+
+// Symbols on board
+const loader = new THREE.TextureLoader();
+const canvas2d = document.createElement('canvas');
+canvas2d.width = 1024; canvas2d.height = 512;
+const ctx = canvas2d.getContext('2d');
+ctx.fillStyle = '#2a1810';
+ctx.fillRect(0,0,1024,512);
+ctx.font = 'bold 28px Times New Roman';
+ctx.fillStyle = '#d4af37';
+ctx.textAlign = 'center';
+
+symbols.forEach(s => {
+  const px = (s.x + 3.5) / 7 * 1024;
+  const py = (1 - (s.y + 2) / 4) * 512;
+  ctx.fillText(s.char, px, py);
+});
+
+const boardTex = new THREE.CanvasTexture(canvas2d);
+const labelGeo = new THREE.PlaneGeometry(7, 4);
+const labelMat = new THREE.MeshBasicMaterial({map:boardTex, transparent:true});
+const labels = new THREE.Mesh(labelGeo, labelMat);
+labels.rotation.x = -Math.PI/2;
+labels.position.y = 0.01;
+scene.add(labels);
+
+// Planchette
+const planchGeo = new THREE.ConeGeometry(0.3, 0.1, 3);
+planchGeo.rotateX(Math.PI/2);
+const planchMat = new THREE.MeshStandardMaterial({
+  color:0xd4af37, metalness:0.6, roughness:0.3, emissive:0x442200
+});
+const planchette = new THREE.Mesh(planchGeo, planchMat);
+planchette.position.y = 0.15;
+scene.add(planchette);
+
+// Glow ring under planchette
+const ringGeo = new THREE.RingGeometry(0.25, 0.35, 32);
+const ringMat = new THREE.MeshBasicMaterial({color:0xd4af37, transparent:true, opacity:0.3});
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = -Math.PI/2;
+ring.position.y = 0.02;
+scene.add(ring);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x221111, 0.5));
+const candle1 = new THREE.PointLight(0xff6600, 30, 10);
+candle1.position.set(-3, 2, -2);
+scene.add(candle1);
+const candle2 = new THREE.PointLight(0xff6600, 30, 10);
+candle2.position.set(3, 2, -2);
+scene.add(candle2);
+
+// Find nearest symbol
+function nearestSymbol(x, y) {
+  let best = null, bestDist = Infinity;
+  for (const s of symbols) {
+    const d = Math.hypot(s.x - x, s.y - y);
+    if (d < bestDist) { bestDist = d; best = s; }
+  }
+  return best;
+}
+
+// Oracle drives movement
+oracle.on('sample', (s) => {
+  if (s.isWatched === null) return;
+
+  const entropy = s.entropy || {};
+  const v = entropy.execVariance || 0;
+  const d = entropy.clockDrift || 0;
+  const r = entropy.rngTiming || 0;
+
+  // Use entropy to nudge target position
+  const angle = ((v * 100000) % 1) * Math.PI * 2;
+  const magnitude = 0.15 + (d * 10000) % 0.1;
+
+  targetPos.x += Math.cos(angle) * magnitude;
+  targetPos.y += Math.sin(angle) * magnitude;
+
+  // Bounds
+  targetPos.x = Math.max(-3, Math.min(3, targetPos.x));
+  targetPos.y = Math.max(-2, Math.min(1.5, targetPos.y));
+
+  // Status
+  document.getElementById('status').textContent =
+    `v:${v.toFixed(5)} | conf:${(s.confidence*100).toFixed(0)}%`;
+});
+
+// Start oracle
+setTimeout(() => {
+  oracle.calibrate(3);
+  oracle.start(80);
+}, 500);
+
+// Animation
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Smooth follow
+  currentPos.x += (targetPos.x - currentPos.x) * 0.05;
+  currentPos.y += (targetPos.y - currentPos.y) * 0.05;
+
+  planchette.position.x = currentPos.x;
+  planchette.position.z = -currentPos.y;
+  ring.position.x = currentPos.x;
+  ring.position.z = -currentPos.y;
+
+  // Check dwell on symbol
+  const sym = nearestSymbol(currentPos.x, currentPos.y);
+  if (sym && Math.hypot(sym.x - currentPos.x, sym.y - currentPos.y) < 0.4) {
+    if (sym === lastSymbol) {
+      dwellTime++;
+      ring.material.opacity = Math.min(0.8, 0.3 + dwellTime/60);
+      if (dwellTime > 45 && !selecting) {
+        selecting = true;
+        message += sym.char;
+        document.getElementById('message').textContent = message;
+        planchMat.emissive.setHex(0x886600);
+        setTimeout(() => {
+          planchMat.emissive.setHex(0x442200);
+          selecting = false;
+        }, 200);
+      }
+    } else {
+      lastSymbol = sym;
+      dwellTime = 0;
+      ring.material.opacity = 0.3;
+    }
+  } else {
+    dwellTime = 0;
+    ring.material.opacity = 0.3;
+  }
+
+  // Candle flicker
+  candle1.intensity = 25 + Math.random() * 10;
+  candle2.intensity = 25 + Math.random() * 10;
+
+  // Subtle camera sway
+  camera.position.x = Math.sin(Date.now() * 0.0003) * 0.2;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// Clear button
+document.getElementById('clear').onclick = () => {
+  message = '';
+  document.getElementById('message').textContent = '';
+};
+
+// Resize
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDEN</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #080510; overflow: hidden; font-family: Georgia, serif; }
+        #canvas { width: 100%; height: 100%; display: block; }
+
+        .panel {
+            position: absolute;
+            background: rgba(8,5,16,0.94);
+            border: 1px solid rgba(255,215,0,0.12);
+            border-radius: 6px;
+            padding: 0.8rem;
+            color: #fff8e7;
+            backdrop-filter: blur(10px);
+        }
+
+        #status { top: 1rem; left: 1rem; font-size: 0.65rem; opacity: 0.5; }
+        #controls { top: 1rem; right: 1rem; font-size: 0.55rem; opacity: 0.3; }
+
+        #input-panel { bottom: 1rem; left: 1rem; width: 220px; }
+        #input-panel h3 { color: #ffd700; font-size: 0.75rem; margin-bottom: 0.4rem; }
+        #input-panel input {
+            width: 100%; padding: 0.45rem; margin-bottom: 0.35rem;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,215,0,0.15);
+            border-radius: 4px; color: #fff8e7; font-size: 0.75rem;
+        }
+        #input-panel button {
+            width: 100%; padding: 0.45rem; border: none; border-radius: 4px;
+            background: linear-gradient(135deg, #ffd700, #f7931e);
+            color: #080510; cursor: pointer; font-weight: 600;
+        }
+        #input-panel small { display: block; margin-top: 0.35rem; font-size: 0.5rem; opacity: 0.4; }
+
+        #tooltip {
+            position: absolute;
+            background: rgba(8,5,16,0.96);
+            border: 1px solid rgba(255,215,0,0.25);
+            border-radius: 5px;
+            padding: 0.5rem 0.7rem;
+            color: #fff8e7;
+            font-size: 0.7rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 50;
+            max-width: 280px;
+        }
+        #tooltip.visible { opacity: 1; }
+        #tooltip-path { color: #ffd700; font-weight: 600; margin-bottom: 0.2rem; word-break: break-all; }
+        #tooltip-meta { opacity: 0.65; font-size: 0.6rem; }
+
+        #file-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            max-width: 94vw;
+            max-height: 88vh;
+            display: none;
+            flex-direction: column;
+            z-index: 100;
+        }
+        #file-panel.visible { display: flex; }
+
+        #file-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 0.4rem; border-bottom: 1px solid rgba(255,215,0,0.12); margin-bottom: 0.4rem;
+        }
+        #file-title { color: #ffd700; font-size: 0.8rem; word-break: break-all; }
+        #file-close { background: none; border: none; color: #fff8e7; font-size: 1.2rem; cursor: pointer; opacity: 0.5; }
+        #file-close:hover { opacity: 1; }
+
+        #file-meta { font-size: 0.6rem; opacity: 0.45; margin-bottom: 0.4rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+        #file-meta span { padding: 0.12rem 0.35rem; background: rgba(255,255,255,0.04); border-radius: 3px; }
+
+        #file-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.4rem; }
+        #file-tabs .tab {
+            padding: 0.35rem 0.7rem; background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,215,0,0.08); border-radius: 4px 4px 0 0;
+            color: #fff8e7; font-size: 0.65rem; cursor: pointer; opacity: 0.5;
+        }
+        #file-tabs .tab.active { opacity: 1; background: rgba(255,215,0,0.08); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        #file-content { overflow: auto; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.6rem; max-height: 280px; }
+        #file-code { font-family: 'Monaco','Consolas',monospace; font-size: 0.6rem; color: #aaa; margin: 0; white-space: pre-wrap; word-break: break-all; }
+
+        #file-iframe { width: 100%; height: 280px; border: 1px solid rgba(255,215,0,0.15); border-radius: 4px; background: white; }
+
+        #ai-status { font-size: 0.6rem; margin-bottom: 0.3rem; opacity: 0.5; }
+        #ai-messages { max-height: 100px; overflow-y: auto; margin-bottom: 0.4rem; }
+        .ai-msg { padding: 0.35rem 0.5rem; margin: 0.2rem 0; border-radius: 4px; font-size: 0.65rem; line-height: 1.3; }
+        .ai-msg.user { background: rgba(255,215,0,0.06); margin-left: 0.6rem; }
+        .ai-msg.assistant { background: rgba(100,180,140,0.06); margin-right: 0.6rem; }
+
+        #ai-input-row { display: flex; gap: 0.25rem; margin-bottom: 0.4rem; }
+        #ai-input { flex: 1; padding: 0.35rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,215,0,0.12); border-radius: 4px; color: #fff8e7; font-size: 0.7rem; }
+        #ai-send { padding: 0.35rem 0.7rem; background: #4a9; border: none; border-radius: 4px; color: white; cursor: pointer; }
+
+        #ai-actions { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+        #ai-actions button { padding: 0.25rem 0.45rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,215,0,0.1); border-radius: 3px; color: #fff8e7; font-size: 0.55rem; cursor: pointer; }
+
+        #loading {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #080510; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 200;
+            transition: opacity 0.6s;
+        }
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        #loading h1 { font-size: 2.5rem; color: #ffd700; letter-spacing: 0.2em; }
+        #loading p { margin-top: 0.6rem; opacity: 0.4; font-size: 0.8rem; }
+
+        #repo-info { position: absolute; bottom: 1rem; right: 1rem; font-size: 0.55rem; opacity: 0.4; max-width: 160px; }
+        #repo-info h4 { color: #ffd700; margin-bottom: 0.3rem; font-size: 0.65rem; }
+    </style>
+</head>
+<body>
+    <div id="loading"><h1>EDEN</h1><p id="load-status">Enter repository or username</p></div>
+    <canvas id="canvas"></canvas>
+
+    <div id="status" class="panel">
+        <div>files: <span id="file-count">0</span></div>
+        <div>trees: <span id="tree-count">0</span></div>
+    </div>
+
+    <div id="controls" class="panel">drag: orbit · scroll: zoom · click: inspect</div>
+
+    <div id="repo-info" class="panel">
+        <h4 id="repo-name">-</h4>
+        <div id="repo-stats"></div>
+    </div>
+
+    <div id="input-panel" class="panel">
+        <h3>🌳 Grow</h3>
+        <input id="repo-input" placeholder="owner/repo or owner">
+        <button id="repo-btn">Grow</button>
+        <small>owner/repo → one tree<br>owner → forest of repos</small>
+    </div>
+
+    <div id="tooltip"><div id="tooltip-path"></div><div id="tooltip-meta"></div></div>
+
+    <div id="file-panel" class="panel">
+        <div id="file-header">
+            <span id="file-title"></span>
+            <button id="file-close">×</button>
+        </div>
+        <div id="file-meta"></div>
+        <div id="file-tabs">
+            <button class="tab active" data-tab="code">Code</button>
+            <button class="tab" data-tab="preview">Preview</button>
+            <button class="tab" data-tab="ai">AI</button>
+        </div>
+        <div id="tab-code" class="tab-content active">
+            <div id="file-content"><pre id="file-code"></pre></div>
+        </div>
+        <div id="tab-preview" class="tab-content">
+            <iframe id="file-iframe"></iframe>
+        </div>
+        <div id="tab-ai" class="tab-content">
+            <div id="ai-status">🤖 Ready</div>
+            <div id="ai-messages"></div>
+            <div id="ai-input-row">
+                <input id="ai-input" placeholder="Ask about this file...">
+                <button id="ai-send">→</button>
+            </div>
+            <div id="ai-actions">
+                <button data-action="explain">Explain</button>
+                <button data-action="refactor">Refactor</button>
+                <button data-action="bugs">Bugs</button>
+                <button data-action="run">Run</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+    const τ = Math.PI * 2;
+    const φ = 1.618033988749895;
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+    // ════════════════════════════════════════════════════════════════════
+    // THREE.JS SETUP
+    // ════════════════════════════════════════════════════════════════════
+
+    const canvas = document.getElementById('canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setClearColor(0x050308);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0x404060, 0.6);
+    scene.add(ambient);
+    const sun = new THREE.DirectionalLight(0xffeedd, 0.8);
+    sun.position.set(50, 80, 50);
+    scene.add(sun);
+    scene.add(new THREE.DirectionalLight(0x8899cc, 0.2).translateX(-30).translateY(40).translateZ(-30));
+
+    // Sky dome
+    const skyGeo = new THREE.SphereGeometry(400, 32, 24);
+    const skyMat = new THREE.MeshBasicMaterial({
+        color: 0x1a1a2e,
+        side: THREE.BackSide
+    });
+    scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+    // Ground
+    const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(300, 64),
+        new THREE.MeshPhongMaterial({ color: 0x0d0a08 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.1;
+    scene.add(ground);
+
+    // ════════════════════════════════════════════════════════════════════
+    // STATE
+    // ════════════════════════════════════════════════════════════════════
+
+    const state = {
+        trees: [],
+        clickables: [],  // All clickable meshes with their data
+        currentRepo: null
+    };
+
+    // ════════════════════════════════════════════════════════════════════
+    // GEOMETRY - Simplified for performance
+    // ════════════════════════════════════════════════════════════════════
+
+    function createTrunk(height, radius) {
+        const geo = new THREE.CylinderGeometry(radius * 0.4, radius, height, 8);
+        geo.translate(0, height / 2, 0);
+        return new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: 0x4a3020 }));
+    }
+
+    function createBranch(start, end, radius) {
+        const dir = new THREE.Vector3().subVectors(end, start);
+        const len = dir.length();
+        const geo = new THREE.CylinderGeometry(radius * 0.3, radius, len, 6);
+        const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: 0x5a4030 }));
+
+        mesh.position.copy(start).add(end).multiplyScalar(0.5);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+
+        return mesh;
+    }
+
+    function createFlower(size, hue) {
+        const group = new THREE.Group();
+        const color = new THREE.Color().setHSL(hue, 0.7, 0.6);
+
+        // Center sphere - THIS IS CLICKABLE
+        const center = new THREE.Mesh(
+            new THREE.SphereGeometry(size * 0.35, 8, 8),
+            new THREE.MeshPhongMaterial({ color: 0xffdd44 })
+        );
+        group.add(center);
+
+        // Petals
+        for (let i = 0; i < 5; i++) {
+            const petal = new THREE.Mesh(
+                new THREE.SphereGeometry(size * 0.4, 6, 6),
+                new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.9 })
+            );
+            petal.scale.set(1, 0.3, 0.6);
+            const a = (i / 5) * τ;
+            petal.position.set(Math.cos(a) * size * 0.4, 0, Math.sin(a) * size * 0.4);
+            petal.rotation.y = -a;
+            petal.rotation.z = -0.5;
+            group.add(petal);
+        }
+
+        return group;
+    }
+
+    function createLeaves(size) {
+        const group = new THREE.Group();
+        const count = 4 + Math.floor(Math.random() * 4);
+
+        for (let i = 0; i < count; i++) {
+            const leaf = new THREE.Mesh(
+                new THREE.SphereGeometry(size * (0.4 + Math.random() * 0.4), 6, 4),
+                new THREE.MeshPhongMaterial({ color: 0x3a5a30 })
+            );
+            leaf.scale.y = 0.5;
+            leaf.position.set(
+                (Math.random() - 0.5) * size * 2,
+                (Math.random() - 0.5) * size,
+                (Math.random() - 0.5) * size * 2
+            );
+            group.add(leaf);
+        }
+        return group;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // TREE CREATION
+    // ════════════════════════════════════════════════════════════════════
+
+    function createTree(x, z, height, radius, files, repoName) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+
+        // Trunk
+        group.add(createTrunk(height, radius));
+
+        // Branches and flowers
+        const branchCount = Math.min(12, 4 + Math.floor(files.length / 5));
+        let fileIdx = 0;
+
+        for (let i = 0; i < branchCount; i++) {
+            const angle = i * goldenAngle;
+            const h = height * (0.25 + (i / branchCount) * 0.55);
+            const len = 2 + Math.random() * (height * 0.3);
+
+            const start = new THREE.Vector3(
+                Math.cos(angle) * radius * 0.3,
+                h,
+                Math.sin(angle) * radius * 0.3
+            );
+            const end = new THREE.Vector3(
+                Math.cos(angle) * (radius + len),
+                h + len * 0.25,
+                Math.sin(angle) * (radius + len)
+            );
+
+            group.add(createBranch(start, end, 0.15));
+
+            // Leaves at branch end
+            const leaves = createLeaves(1 + Math.random());
+            leaves.position.copy(end);
+            group.add(leaves);
+
+            // Flowers along branch
+            const flowersOnBranch = Math.min(4, Math.ceil((files.length - fileIdx) / (branchCount - i)));
+
+            for (let j = 0; j < flowersOnBranch && fileIdx < files.length; j++) {
+                const file = files[fileIdx++];
+                const t = 0.25 + (j / flowersOnBranch) * 0.65;
+
+                const pos = start.clone().lerp(end, t);
+                pos.x += (Math.random() - 0.5) * 0.8;
+                pos.y += (Math.random() - 0.5) * 0.5;
+                pos.z += (Math.random() - 0.5) * 0.8;
+
+                const hue = getHueForFile(file.name);
+                const size = 0.3 + Math.min(0.7, (file.size || 100) / 5000);
+
+                const flower = createFlower(size, hue);
+                flower.position.copy(pos);
+                group.add(flower);
+
+                // Store for clicking - need world position
+                flower.userData = {
+                    file: file,
+                    repo: repoName
+                };
+                state.clickables.push(flower);
+            }
+        }
+
+        scene.add(group);
+        state.trees.push(group);
+        return group;
+    }
+
+    function getHueForFile(filename) {
+        if (/\.(js|jsx|mjs)$/i.test(filename)) return 0.12;
+        if (/\.(ts|tsx)$/i.test(filename)) return 0.58;
+        if (/\.py$/i.test(filename)) return 0.35;
+        if (/\.(html|htm)$/i.test(filename)) return 0.02;
+        if (/\.css$/i.test(filename)) return 0.75;
+        if (/\.(md|txt)$/i.test(filename)) return 0.85;
+        if (/\.(json|yaml|yml)$/i.test(filename)) return 0.15;
+        if (/\.(go|rs)$/i.test(filename)) return 0.48;
+        return 0.33;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // FOREST PATTERNS - Aesthetic layouts
+    // ════════════════════════════════════════════════════════════════════
+
+    function getForestPosition(index, total) {
+        // Fibonacci spiral for natural distribution
+        const angle = index * goldenAngle;
+        const r = 8 + Math.sqrt(index) * 10;
+
+        // Add some organic variation
+        const wobble = Math.sin(index * 0.7) * 3;
+
+        return {
+            x: Math.cos(angle) * r + wobble,
+            z: Math.sin(angle) * r + wobble * 0.5
+        };
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // LOADING
+    // ════════════════════════════════════════════════════════════════════
+
+    async function loadInput(input) {
+        if (input.includes('/')) {
+            await loadSingleRepo(input);
+        } else {
+            await loadForest(input);
+        }
+    }
+
+    async function loadForest(username) {
+        const status = document.getElementById('load-status');
+        const overlay = document.getElementById('loading');
+        status.textContent = `Loading ${username}...`;
+        overlay.classList.remove('hidden');
+
+        // Clear
+        state.trees.forEach(t => scene.remove(t));
+        state.trees = [];
+        state.clickables = [];
+
+        try {
+            const res = await fetch(`https://api.github.com/users/${username}/repos?per_page=100&sort=pushed`);
+            if (!res.ok) throw new Error('User not found');
+            const repos = await res.json();
+
+            if (!repos.length) throw new Error('No repos');
+
+            status.textContent = `Growing ${repos.length} trees...`;
+
+            // Load repos in batches
+            const batch = repos.slice(0, 50);
+            let loaded = 0;
+
+            for (let i = 0; i < batch.length; i++) {
+                const repo = batch[i];
+                const pos = getForestPosition(i, batch.length);
+
+                // Size based on repo size
+                const sizeFactor = Math.sqrt(repo.size || 100) * 0.02;
+                const height = Math.max(6, Math.min(30, 8 + sizeFactor));
+                const radius = Math.max(0.4, Math.min(2, 0.5 + sizeFactor * 0.1));
+
+                // Try to load files
+                try {
+                    const treeRes = await fetch(`https://api.github.com/repos/${username}/${repo.name}/git/trees/main?recursive=1`);
+                    let data = treeRes.ok ? await treeRes.json() : null;
+
+                    if (!data?.tree) {
+                        const masterRes = await fetch(`https://api.github.com/repos/${username}/${repo.name}/git/trees/master?recursive=1`);
+                        data = masterRes.ok ? await masterRes.json() : null;
+                    }
+
+                    if (data?.tree) {
+                        const files = data.tree
+                            .filter(f => f.type === 'blob' && !f.path.includes('node_modules') && !f.path.startsWith('.'))
+                            .slice(0, 50)
+                            .map(f => ({ path: f.path, name: f.path.split('/').pop(), size: f.size || 100 }));
+
+                        if (files.length > 0) {
+                            createTree(pos.x, pos.z, height, radius, files, `${username}/${repo.name}`);
+                            loaded++;
+                        }
+                    }
+                } catch (e) {
+                    // Skip failed repos
+                }
+
+                // Update progress
+                status.textContent = `Growing... ${loaded}/${i + 1}`;
+
+                // Small delay to avoid rate limits
+                if (i % 5 === 4) await new Promise(r => setTimeout(r, 100));
+            }
+
+            updateUI(username, loaded);
+            overlay.classList.add('hidden');
+
+        } catch (e) {
+            status.textContent = `Error: ${e.message}`;
+            setTimeout(() => overlay.classList.add('hidden'), 2000);
+        }
+    }
+
+    async function loadSingleRepo(repoPath) {
+        const status = document.getElementById('load-status');
+        const overlay = document.getElementById('loading');
+        status.textContent = `Loading ${repoPath}...`;
+        overlay.classList.remove('hidden');
+
+        // Clear
+        state.trees.forEach(t => scene.remove(t));
+        state.trees = [];
+        state.clickables = [];
+        state.currentRepo = repoPath;
+
+        try {
+            let data;
+            for (const branch of ['main', 'master']) {
+                const res = await fetch(`https://api.github.com/repos/${repoPath}/git/trees/${branch}?recursive=1`);
+                if (res.ok) { data = await res.json(); break; }
+            }
+
+            if (!data?.tree) throw new Error('Could not load repo');
+
+            const files = data.tree
+                .filter(f => f.type === 'blob' && !f.path.includes('node_modules') && !f.path.startsWith('.'))
+                .slice(0, 200)
+                .map(f => ({ path: f.path, name: f.path.split('/').pop(), size: f.size || 100 }));
+
+            // Single big tree in center
+            const height = Math.min(40, 15 + files.length * 0.1);
+            const radius = Math.min(3, 1 + files.length * 0.005);
+
+            createTree(0, 0, height, radius, files, repoPath);
+
+            updateUI(repoPath, 1, files.length);
+            overlay.classList.add('hidden');
+
+        } catch (e) {
+            status.textContent = `Error: ${e.message}`;
+            setTimeout(() => overlay.classList.add('hidden'), 2000);
+        }
+    }
+
+    function updateUI(name, treeCount, fileCount) {
+        document.getElementById('repo-name').textContent = name;
+        document.getElementById('tree-count').textContent = treeCount;
+        document.getElementById('file-count').textContent = fileCount || state.clickables.length;
+        document.getElementById('repo-stats').innerHTML = `${state.clickables.length} flowers`;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // INTERACTION
+    // ════════════════════════════════════════════════════════════════════
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const tooltip = document.getElementById('tooltip');
+
+    let currentFile = null;
+    let chatHistory = [];
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+
+    function onMouseMove(e) {
+        if (isDragging) {
+            const dx = e.clientX - dragStart.x;
+            const dy = e.clientY - dragStart.y;
+            camAngle += dx * 0.005;
+            camPitch = Math.max(0.1, Math.min(1.3, camPitch + dy * 0.003));
+            dragStart.x = e.clientX;
+            dragStart.y = e.clientY;
+            tooltip.classList.remove('visible');
+            return;
+        }
+
+        mouse.x = (e.clientX / innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+
+        // Check all clickable flowers
+        let hit = null;
+        for (const flower of state.clickables) {
+            const intersects = raycaster.intersectObject(flower, true);
+            if (intersects.length > 0) {
+                hit = flower;
+                break;
+            }
+        }
+
+        if (hit) {
+            canvas.style.cursor = 'pointer';
+            const data = hit.userData;
+            document.getElementById('tooltip-path').textContent = data.file.path;
+            document.getElementById('tooltip-meta').innerHTML = `${data.file.size} bytes<br><span style="color:#ffd700">${data.repo}</span>`;
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+            tooltip.classList.add('visible');
+        } else {
+            canvas.style.cursor = 'default';
+            tooltip.classList.remove('visible');
+        }
+    }
+
+    function onClick(e) {
+        if (isDragging) return;
+
+        mouse.x = (e.clientX / innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+
+        for (const flower of state.clickables) {
+            const intersects = raycaster.intersectObject(flower, true);
+            if (intersects.length > 0) {
+                openFilePanel(flower.userData);
+                return;
+            }
+        }
+    }
+
+    async function openFilePanel(data) {
+        const file = data.file;
+        const repo = data.repo;
+        currentFile = { ...file, repo };
+        chatHistory = [];
+
+        const ext = file.name.split('.').pop().toLowerCase();
+        const isPreviewable = ['html', 'htm', 'svg'].includes(ext);
+
+        document.getElementById('file-title').textContent = file.path;
+        document.getElementById('file-meta').innerHTML = `<span>${file.size} B</span><span>${ext.toUpperCase()}</span><span>${repo}</span>`;
+        document.getElementById('file-code').textContent = 'Loading...';
+        document.getElementById('ai-messages').innerHTML = '';
+
+        document.querySelector('[data-tab="preview"]').style.display = isPreviewable ? '' : 'none';
+        switchTab('code');
+        document.getElementById('file-panel').classList.add('visible');
+
+        try {
+            let res = await fetch(`https://raw.githubusercontent.com/${repo}/main/${file.path}`);
+            if (!res.ok) res = await fetch(`https://raw.githubusercontent.com/${repo}/master/${file.path}`);
+
+            const text = await res.text();
+            currentFile.content = text;
+            document.getElementById('file-code').textContent = text.substring(0, 8000);
+
+            if (isPreviewable) {
+                const iframe = document.getElementById('file-iframe');
+                iframe.srcdoc = ext === 'svg' ? text : text.replace('<head>', `<head><base href="https://raw.githubusercontent.com/${repo}/main/">`);
+            }
+        } catch (e) {
+            document.getElementById('file-code').textContent = '// Could not load';
+        }
+    }
+
+    function switchTab(name) {
+        document.querySelectorAll('#file-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${name}`));
+    }
+
+    async function sendToAI(msg, action) {
+        if (!currentFile?.content) return;
+
+        let prompt = msg || { explain: 'Explain this code', refactor: 'Suggest improvements', bugs: 'Find bugs', run: 'How to run this?' }[action] || msg;
+
+        chatHistory.push({ role: 'user', content: prompt });
+        renderChat();
+        document.getElementById('ai-status').textContent = '🤖 Thinking...';
+
+        // Local analysis fallback (no API key needed)
+        const code = currentFile.content;
+        const lines = code.split('\n');
+        const ext = currentFile.name.split('.').pop();
+
+        let response = '';
+
+        if (action === 'explain' || prompt.toLowerCase().includes('explain')) {
+            const funcs = (code.match(/function\s+\w+|const\s+\w+\s*=\s*(\(|async)|def\s+\w+|class\s+\w+/g) || []);
+            response = `📄 **${currentFile.name}** (${lines.length} lines)\n\n`;
+            response += `**Type:** ${ext.toUpperCase()} file\n`;
+            response += `**Size:** ${currentFile.size} bytes\n`;
+            response += `**Definitions:** ${funcs.length} functions/classes\n\n`;
+            if (funcs.length) response += `**Found:**\n${funcs.slice(0, 10).map(f => `• ${f}`).join('\n')}`;
+        } else if (action === 'bugs' || prompt.toLowerCase().includes('bug')) {
+            const issues = [];
+            if (code.includes('console.log')) issues.push('Debug console.log statements present');
+            if (code.includes('TODO') || code.includes('FIXME')) issues.push('Contains TODO/FIXME comments');
+            if (code.includes('var ')) issues.push('Uses var instead of let/const');
+            if (code.includes('==') && !code.includes('===')) issues.push('Uses loose equality (==)');
+            response = issues.length ? `⚠️ **Potential issues:**\n${issues.map(i => `• ${i}`).join('\n')}` : '✅ No obvious issues detected';
+        } else if (action === 'refactor') {
+            response = `💡 **Suggestions:**\n• Consider extracting repeated logic\n• Add error handling for edge cases\n• Document complex sections`;
+        } else if (action === 'run') {
+            const runners = {
+                js: 'node filename.js',
+                ts: 'npx ts-node filename.ts',
+                py: 'python filename.py',
+                html: 'Open in browser',
+                go: 'go run filename.go',
+                rs: 'cargo run'
+            };
+            response = `🚀 **Run:** \`${runners[ext] || 'Check documentation'}\``;
+        } else {
+            response = `I analyzed ${currentFile.name}. It has ${lines.length} lines of ${ext.toUpperCase()} code.`;
+        }
+
+        chatHistory.push({ role: 'assistant', content: response });
+        renderChat();
+        document.getElementById('ai-status').textContent = '🤖 Ready';
+    }
+
+    function renderChat() {
+        document.getElementById('ai-messages').innerHTML = chatHistory.map(m =>
+            `<div class="ai-msg ${m.role}">${m.content.replace(/</g, '&lt;').replace(/\n/g, '<br>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>')}</div>`
+        ).join('');
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // CAMERA CONTROLS
+    // ════════════════════════════════════════════════════════════════════
+
+    let camAngle = 0.5;
+    let camPitch = 0.35;
+    let camDist = 60;
+
+    canvas.addEventListener('mousedown', e => {
+        isDragging = true;
+        dragStart = { x: e.clientX, y: e.clientY };
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+    window.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('click', onClick);
+    canvas.addEventListener('wheel', e => {
+        camDist = Math.max(15, Math.min(200, camDist + e.deltaY * 0.05));
+    });
+
+    // ════════════════════════════════════════════════════════════════════
+    // UI EVENTS
+    // ════════════════════════════════════════════════════════════════════
+
+    document.getElementById('repo-btn').onclick = () => {
+        const v = document.getElementById('repo-input').value.trim();
+        if (v) loadInput(v);
+    };
+    document.getElementById('repo-input').onkeypress = e => { if (e.key === 'Enter') document.getElementById('repo-btn').click(); };
+    document.getElementById('file-close').onclick = () => document.getElementById('file-panel').classList.remove('visible');
+    document.querySelectorAll('#file-tabs .tab').forEach(t => t.onclick = () => switchTab(t.dataset.tab));
+    document.getElementById('ai-send').onclick = () => {
+        const v = document.getElementById('ai-input').value.trim();
+        if (v) { sendToAI(v); document.getElementById('ai-input').value = ''; }
+    };
+    document.getElementById('ai-input').onkeypress = e => { if (e.key === 'Enter') document.getElementById('ai-send').click(); };
+    document.querySelectorAll('#ai-actions button').forEach(b => b.onclick = () => sendToAI(null, b.dataset.action));
+    document.onkeydown = e => { if (e.key === 'Escape') document.getElementById('file-panel').classList.remove('visible'); };
+
+    // ════════════════════════════════════════════════════════════════════
+    // RENDER
+    // ════════════════════════════════════════════════════════════════════
+
+    let time = 0;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        time++;
+
+        camera.position.set(
+            Math.sin(camAngle) * Math.cos(camPitch) * camDist,
+            Math.sin(camPitch) * camDist + 10,
+            Math.cos(camAngle) * Math.cos(camPitch) * camDist
+        );
+        camera.lookAt(0, 8, 0);
+
+        // Gentle sway
+        state.trees.forEach((tree, i) => {
+            tree.rotation.z = Math.sin(time * 0.001 + i) * 0.01;
+        });
+
+        renderer.render(scene, camera);
+    }
+
+    window.onresize = () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+    };
+
+    // Init
+    document.getElementById('loading').classList.add('hidden');
+    animate();
+
+    </script>
+</body>
+</html>

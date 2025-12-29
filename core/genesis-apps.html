@@ -2,167 +2,255 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis Apps</title>
+<title>Genesis</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;color:#0f0;font:12px/1.4 monospace;display:flex;height:100vh}
-.side{width:240px;background:#0a0a0a;border-right:1px solid #1a1a1a;padding:8px;overflow-y:auto}
-.side h1{font-size:14px;margin-bottom:8px}
-.log{font-size:10px;color:#666;max-height:120px;overflow-y:auto;background:#050505;padding:4px;margin-bottom:8px}
-.log div{border-bottom:1px solid #111;padding:2px 0}
-.log .err{color:#f00}
-.log .ok{color:#0f0}
-.log .fix{color:#ff0}
-.types{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
-.type{background:#111;border:1px solid #222;padding:6px;cursor:pointer;font-size:11px}
-.type:hover,.type.sel{border-color:#0f0}
-.ctrls{display:flex;flex-direction:column;gap:4px}
-.ctrls button{background:#0f0;color:#000;border:none;padding:8px;cursor:pointer;font:bold 11px monospace}
-.ctrls button:hover{filter:brightness(1.2)}
-.ctrls button.sec{background:#222;color:#0f0}
-.main{flex:1;display:flex;flex-direction:column}
-.bar{background:#0a0a0a;padding:4px 8px;font-size:10px;border-bottom:1px solid #1a1a1a;display:flex;gap:8px}
-.bar .status{margin-left:auto;color:#666}
-.preview{flex:1;background:#111}
-.preview iframe{width:100%;height:100%;border:none}
-.code{height:200px;background:#050505;border-top:1px solid #1a1a1a;overflow:auto;padding:8px;font-size:10px;display:none}
+body{background:#000;color:#0f0;font:11px/1.4 monospace;height:100vh;display:flex;flex-direction:column}
+.top{display:flex;gap:8px;padding:8px;background:#0a0a0a;border-bottom:1px solid #1a1a1a;align-items:center}
+.top button{background:#0f0;color:#000;border:none;padding:6px 12px;cursor:pointer;font:bold 10px monospace}
+.top button:disabled{opacity:0.3}
+.top .ent{color:#0a0;margin-left:auto}
+.top select{background:#111;color:#0f0;border:1px solid #222;padding:4px;font:10px monospace}
+.log{height:80px;background:#050505;border-bottom:1px solid #1a1a1a;overflow-y:auto;padding:4px 8px;font-size:10px}
+.log div{border-bottom:1px solid #0a0a0a;padding:2px 0}
+.log .e{color:#f00}.log .o{color:#0f0}.log .w{color:#ff0}.log .i{color:#0af}
+.main{flex:1;display:flex}
+.preview{flex:1}
+.preview iframe{width:100%;height:100%;border:none;background:#111}
+.code{width:400px;background:#0a0a0a;border-left:1px solid #1a1a1a;overflow:auto;padding:8px;font-size:9px;display:none}
 .code.show{display:block}
-.ent{color:#0a0;font-size:10px;margin-bottom:8px}
+.status{padding:4px 8px;background:#0a0a0a;border-top:1px solid #1a1a1a;font-size:10px;color:#666;display:flex;gap:16px}
 </style>
 </head>
 <body>
-<div class="side">
-<h1>⚡ GENESIS</h1>
-<div class="ent">entropy: <span id="e">0.0000</span></div>
+<div class="top">
+<button id="gen">⚡ GENERATE</button>
+<button id="iter">🔄 ITERATE</button>
+<button id="fix">🔧 FIX</button>
+<button id="exp">📦 EXPORT</button>
+<button id="cod">{ }</button>
+<select id="mdl">
+<option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama-3.2-3B</option>
+<option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B</option>
+<option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B</option>
+<option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2-1.7B</option>
+</select>
+<span class="ent">e:<span id="e">0.0000</span></span>
+</div>
 <div class="log" id="log"></div>
-<div class="types" id="types"></div>
-<div class="ctrls">
-<button id="gen">GENERATE</button>
-<button id="fix" class="sec">FIX ERRORS</button>
-<button id="rnd" class="sec">RANDOM</button>
-<button id="exp" class="sec">EXPORT</button>
-<button id="cod" class="sec">CODE</button>
-</div>
-<div style="margin-top:8px;font-size:10px;color:#444" id="mdl">model: loading...</div>
-</div>
 <div class="main">
-<div class="bar">
-<span id="name">—</span>
-<span class="status"><span id="time">—</span> | <span id="errs">0</span> errors</span>
-</div>
 <div class="preview"><iframe id="frame"></iframe></div>
 <div class="code" id="code"></div>
+</div>
+<div class="status">
+<span id="mdls">model: loading...</span>
+<span id="stats">—</span>
 </div>
 <script type="module">
 import*as llm from'https://esm.run/@mlc-ai/web-llm';
 
-const APPS=[
-{id:'todo',n:'Todo',p:'todo app:add/remove/check tasks,localStorage'},
-{id:'calc',n:'Calculator',p:'calculator:buttons 0-9,+-*/=,display'},
-{id:'note',n:'Notes',p:'notes app:create/edit/delete notes,search'},
-{id:'time',n:'Timer',p:'timer:start/stop/reset,countdown,lap times'},
-{id:'game',n:'Game',p:'catch game:falling objects,paddle,score'},
-{id:'dash',n:'Dashboard',p:'dashboard:stat cards,simple bar chart'},
-{id:'chat',n:'Chat',p:'chat UI:message list,input,send button'},
-{id:'quiz',n:'Quiz',p:'quiz:questions array,score,next/result'},
-{id:'list',n:'List',p:'sortable list:drag items,reorder'},
-{id:'poll',n:'Poll',p:'poll:options,vote,show percentages'}
-];
+let eng=null,src='',errs=[],generating=false;
 
-let eng=null,sel=null,src='',errs=[];
+// Architecture patterns (token compressed)
+const ARCH=`
+UDT:uuid,version,tokens,path,parent,deps,tags
+COMPONENTS:header,nav,main,aside,footer,modal,card,list,form,chart,table,grid
+PATTERNS:crud,dashboard,wizard,feed,gallery,editor,player,game,chat,poll
+LAYOUTS:single,split,grid,stack,sidebar,tabs,accordion
+INPUTS:text,number,range,toggle,select,radio,checkbox,file,color,date
+ACTIONS:click,submit,drag,swipe,hover,focus,scroll,resize
+STATE:local,session,memory,sync,async,stream
+STYLE:dark,light,neon,minimal,brutalist,glass,retro,cyber
+`;
 
-// Log
-const log=(m,t='')=>{const d=document.getElementById('log');d.innerHTML=`<div class="${t}">${new Date().toLocaleTimeString().slice(0,5)} ${m}</div>`+d.innerHTML;d.innerHTML=d.innerHTML.split('</div>').slice(0,20).join('</div>')};
+// ISA-style instruction set
+const ISA=`
+RENDER(el,props):create element with properties
+BIND(state,el):two-way data binding
+ON(event,handler):attach event listener
+FETCH(url,cb):async data fetch
+STORE(key,val):persist to localStorage
+LOAD(key):read from localStorage
+LOOP(arr,template):render array items
+COND(test,a,b):conditional render
+ANIM(el,keyframes,opts):animate element
+TIMER(fn,ms):interval/timeout
+RNG():entropy random 0-1
+PICK(arr):entropy select from array
+`;
 
-// Entropy
-const entropy=()=>{let a=0;for(let i=0;i<100;i++)a+=(performance.now()*1e6)%1;const e=(a/100+(Date.now()%1000)/1000)/2;document.getElementById('e').textContent=e.toFixed(4);return e};
-const pick=arr=>arr[Math.floor(entropy()*arr.length)];
+const log=(m,t='')=>{const d=document.getElementById('log');d.innerHTML=`<div class="${t}">${new Date().toLocaleTimeString().slice(0,8)} ${m}</div>`+d.innerHTML;d.scrollTop=0};
 
-// Render types
-document.getElementById('types').innerHTML=APPS.map(a=>`<div class="type" data-id="${a.id}">${a.n}</div>`).join('');
-document.querySelectorAll('.type').forEach(el=>el.onclick=()=>{document.querySelectorAll('.type').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');sel=APPS.find(a=>a.id===el.dataset.id)});
+const entropy=()=>{let a=0;for(let i=0;i<100;i++)a+=(performance.now()*1e6)%1;return(a/100+(Date.now()%1000)/1000)/2};
+const ent=()=>{const e=entropy();document.getElementById('e').textContent=e.toFixed(4);return e};
+const pick=arr=>arr[Math.floor(ent()*arr.length)];
+const rng=(min,max)=>Math.floor(min+ent()*(max-min+1));
+
+// Generate entropy seed for this generation
+const genSeed=()=>{
+const pattern=pick(['crud','dashboard','wizard','feed','gallery','editor','player','game','chat','poll','tool','viz']);
+const layout=pick(['single','split','grid','sidebar','tabs']);
+const style=pick(['dark','light','neon','minimal','brutalist','glass','cyber']);
+const primary=`hsl(${rng(0,360)},${rng(50,80)}%,${rng(40,60)}%)`;
+const components=rng(2,5);
+const interactive=ent()>0.4;
+const animated=ent()>0.5;
+return{pattern,layout,style,primary,components,interactive,animated,entropy:ent()};
+};
+
+// Build prompt from entropy
+const buildPrompt=(seed,prev='')=>{
+const iterateCtx=prev?`\nPREVIOUS VERSION:\n${prev.slice(0,800)}\nIMPROVE: add features, fix bugs, enhance UX.\n`:'';
+return`You are a code generator. Output ONLY valid HTML. No explanation.
+
+ARCHITECTURE:
+${ARCH}
+ISA:
+${ISA}
+
+ENTROPY SEED:
+pattern:${seed.pattern}
+layout:${seed.layout}
+style:${seed.style}
+primary:${seed.primary}
+components:${seed.components}
+interactive:${seed.interactive}
+animated:${seed.animated}
+entropy:${seed.entropy.toFixed(6)}
+${iterateCtx}
+Generate a complete, functional single-file HTML application.
+- Working JavaScript (ES6+)
+- Responsive CSS
+- Real interactivity (buttons work, forms submit, state updates)
+- Use the entropy values to influence randomness in the app
+- Dark background (#0a0a0a), primary color ${seed.primary}
+- No external dependencies except CDN libs if needed
+- Include inline CSS and JS
+- Start with <!DOCTYPE html>
+
+OUTPUT HTML:`;
+};
 
 // Load model
-(async()=>{try{eng=await llm.CreateMLCEngine('Llama-3.2-1B-Instruct-q4f16_1-MLC',{initProgressCallback:p=>{document.getElementById('mdl').textContent=p.text||'loading...'}});document.getElementById('mdl').textContent='✓ ready';document.getElementById('mdl').style.color='#0f0';log('model ready','ok')}catch(e){document.getElementById('mdl').textContent='no model';log('model failed','err')}})();
+const loadModel=async()=>{
+const modelId=document.getElementById('mdl').value;
+document.getElementById('mdls').textContent='model: loading...';
+document.getElementById('mdls').style.color='#ff0';
+log(`loading ${modelId}...`,'w');
+try{
+eng=await llm.CreateMLCEngine(modelId,{
+initProgressCallback:p=>document.getElementById('mdls').textContent=p.text||'loading...'
+});
+document.getElementById('mdls').textContent=`model: ${modelId.split('-')[0]}`;
+document.getElementById('mdls').style.color='#0f0';
+log('model ready','o');
+}catch(e){
+document.getElementById('mdls').textContent='model: failed';
+document.getElementById('mdls').style.color='#f00';
+log('model failed: '+e.message,'e');
+}
+};
+
+document.getElementById('mdl').onchange=loadModel;
 
 // Generate
-const gen=async()=>{
-const app=sel||pick(APPS);
-const pal=pick(['#0f0','#0af','#f0a','#fa0','#f44','#4f4']);
-const t0=performance.now();
-log(`generating ${app.n}...`);
-document.getElementById('name').textContent=app.n;
-errs=[];
+const generate=async(iterate=false)=>{
+if(generating||!eng)return;
+generating=true;
+document.getElementById('gen').disabled=true;
+document.getElementById('iter').disabled=true;
 
-const prompt=`Write minimal HTML file. ${app.p}. Style:bg #111,color ${pal},padding 1rem. Working JS. No comments. Start <!DOCTYPE html>:`;
+const seed=genSeed();
+log(`generating: ${seed.pattern}/${seed.layout}/${seed.style}`,'i');
+const t0=performance.now();
+
+const prompt=buildPrompt(seed,iterate?src:'');
 
 try{
-if(!eng)throw new Error('no model');
-const r=await eng.chat.completions.create({messages:[{role:'user',content:prompt}],max_tokens:1500,temperature:0.7});
-src=r.choices[0]?.message?.content||'';
-src=src.replace(/```\w*\n?/g,'').trim();
-if(!src.startsWith('<!'))src=src.slice(src.indexOf('<!'));
+const r=await eng.chat.completions.create({
+messages:[{role:'user',content:prompt}],
+max_tokens:4000,
+temperature:0.8+ent()*0.2
+});
+
+let code=r.choices[0]?.message?.content||'';
+code=code.replace(/```\w*\n?/g,'').trim();
+const idx=code.indexOf('<!DOCTYPE');
+if(idx>=0)code=code.slice(idx);
+else if(code.indexOf('<html')>=0)code='<!DOCTYPE html>'+code.slice(code.indexOf('<html'));
+
+src=code;
+render();
+
+const time=((performance.now()-t0)/1000).toFixed(1);
+const tokens=r.usage?.total_tokens||0;
+document.getElementById('stats').textContent=`${time}s | ${tokens} tokens | ${seed.pattern}`;
+log(`generated in ${time}s (${tokens} tokens)`,'o');
+
+testApp();
 }catch(e){
-log('using template','fix');
-src=genTemplate(app,pal);
+log('generation failed: '+e.message,'e');
 }
 
-render();
-document.getElementById('time').textContent=((performance.now()-t0)/1000).toFixed(1)+'s';
-log('generated','ok');
-testApp();
+generating=false;
+document.getElementById('gen').disabled=false;
+document.getElementById('iter').disabled=false;
 };
 
-// Template fallback
-const genTemplate=(app,c)=>{
-const t={
-todo:`<!DOCTYPE html><html><head><style>*{margin:0;box-sizing:border-box}body{background:#111;color:${c};font-family:system-ui;padding:1rem}input{background:#222;border:1px solid #333;color:${c};padding:8px;width:70%}button{background:${c};color:#111;border:none;padding:8px 16px;cursor:pointer}ul{list-style:none;margin-top:1rem}li{padding:8px;background:#1a1a1a;margin:4px 0;display:flex;justify-content:space-between}li.done{opacity:0.5;text-decoration:line-through}</style></head><body><h2>Todo</h2><div><input id="i" placeholder="task"><button onclick="add()">+</button></div><ul id="l"></ul><script>let t=JSON.parse(localStorage.todo||'[]');const r=()=>{document.getElementById('l').innerHTML=t.map((x,i)=>\`<li class="\${x.d?'done':''}" onclick="tog(\${i})">\${x.t}<span onclick="del(\${i});event.stopPropagation()">×</span></li>\`).join('');localStorage.todo=JSON.stringify(t)};const add=()=>{const i=document.getElementById('i');if(i.value){t.push({t:i.value,d:false});i.value='';r()}};const tog=i=>{t[i].d=!t[i].d;r()};const del=i=>{t.splice(i,1);r()};r()<\/script></body></html>`,
-calc:`<!DOCTYPE html><html><head><style>*{margin:0;box-sizing:border-box}body{background:#111;color:${c};font-family:system-ui;padding:1rem;display:flex;justify-content:center;align-items:center;min-height:100vh}.c{background:#1a1a1a;padding:1rem;border-radius:8px;width:240px}.d{background:#222;padding:1rem;text-align:right;font-size:24px;margin-bottom:8px;border-radius:4px;min-height:50px}.btns{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}button{padding:16px;font-size:16px;border:none;cursor:pointer;background:#333;color:${c}}button.op{background:${c};color:#111}</style></head><body><div class="c"><div class="d" id="d">0</div><div class="btns"><button onclick="cl()">C</button><button onclick="ap('(')">(</button><button onclick="ap(')')">)</button><button class="op" onclick="ap('/')">÷</button><button onclick="ap('7')">7</button><button onclick="ap('8')">8</button><button onclick="ap('9')">9</button><button class="op" onclick="ap('*')">×</button><button onclick="ap('4')">4</button><button onclick="ap('5')">5</button><button onclick="ap('6')">6</button><button class="op" onclick="ap('-')">-</button><button onclick="ap('1')">1</button><button onclick="ap('2')">2</button><button onclick="ap('3')">3</button><button class="op" onclick="ap('+')">+</button><button onclick="ap('0')">0</button><button onclick="ap('.')">.</button><button onclick="bk()">←</button><button class="op" onclick="eq()">=</button></div></div><script>let x='';const d=()=>document.getElementById('d').textContent=x||'0';const ap=v=>{x+=v;d()};const cl=()=>{x='';d()};const bk=()=>{x=x.slice(0,-1);d()};const eq=()=>{try{x=String(eval(x))}catch{x='Err'}d()}<\/script></body></html>`,
-game:`<!DOCTYPE html><html><head><style>*{margin:0;box-sizing:border-box}body{background:#111;color:${c};font-family:system-ui;display:flex;flex-direction:column;align-items:center;padding:1rem}canvas{background:#1a1a1a;border-radius:4px}p{margin-top:8px}</style></head><body><canvas id="g" width="300" height="300"></canvas><p>Score:<span id="s">0</span></p><script>const c=document.getElementById('g').getContext('2d');let p={x:130,w:40},b=[],s=0;const sp=()=>b.push({x:Math.random()*280+10,y:0,s:2+Math.random()*2});setInterval(()=>{c.clearRect(0,0,300,300);c.fillStyle='${c}';c.fillRect(p.x,280,p.w,10);b.forEach(o=>{o.y+=o.s;c.beginPath();c.arc(o.x,o.y,8,0,7);c.fill()});b=b.filter(o=>{if(o.y>280&&o.x>p.x&&o.x<p.x+p.w){s++;document.getElementById('s').textContent=s;return false}return o.y<310});if(Math.random()<0.03)sp()},16);document.getElementById('g').onmousemove=e=>{const r=e.target.getBoundingClientRect();p.x=e.clientX-r.left-20}<\/script></body></html>`
-};
-return t[app.id]||t.todo;
+const render=()=>{
+document.getElementById('frame').srcdoc=src;
+document.getElementById('code').textContent=src;
 };
 
-// Render
-const render=()=>{document.getElementById('frame').srcdoc=src;document.getElementById('code').textContent=src};
-
-// Test app
+// Self-test
 const testApp=()=>{
 errs=[];
 const frame=document.getElementById('frame');
 frame.onload=()=>{
 try{
 const doc=frame.contentDocument;
-if(!doc.body.innerHTML.trim()){errs.push('empty body');log('empty body','err')}
-const scripts=doc.querySelectorAll('script');
-scripts.forEach((s,i)=>{try{new Function(s.textContent)}catch(e){errs.push(`script ${i}: ${e.message}`);log(`script err: ${e.message}`,'err')}});
-if(errs.length===0)log('tests passed','ok');
-}catch(e){log('test error: '+e.message,'err')}
-document.getElementById('errs').textContent=errs.length;
-}};
+if(!doc.body||!doc.body.innerHTML.trim()){errs.push('empty');log('empty body','e')}
+doc.querySelectorAll('script').forEach((s,i)=>{
+try{new Function(s.textContent)}catch(e){errs.push(e.message);log(`js error: ${e.message}`,'e')}
+});
+if(errs.length===0)log('tests passed','o');
+}catch(e){log('test failed: '+e.message,'e')}
+};
+};
 
-// Fix errors with LLM
+// Fix with LLM
 const fix=async()=>{
-if(!eng||errs.length===0){log('nothing to fix');return}
-log('fixing errors...','fix');
-const prompt=`Fix this HTML. Errors: ${errs.join(', ')}. Code:\n${src.slice(0,1000)}\n\nReturn fixed HTML only:`;
+if(!eng||errs.length===0){log('nothing to fix','w');return}
+log('fixing...','w');
+const prompt=`Fix these errors in the HTML: ${errs.join('; ')}\n\nCode:\n${src.slice(0,2000)}\n\nReturn ONLY fixed HTML starting with <!DOCTYPE html>:`;
 try{
-const r=await eng.chat.completions.create({messages:[{role:'user',content:prompt}],max_tokens:1500,temperature:0.3});
+const r=await eng.chat.completions.create({messages:[{role:'user',content:prompt}],max_tokens:4000,temperature:0.3});
 let fixed=r.choices[0]?.message?.content||'';
 fixed=fixed.replace(/```\w*\n?/g,'').trim();
-if(fixed.includes('<!DOCTYPE')){src=fixed.slice(fixed.indexOf('<!'));render();log('fixed applied','ok');testApp()}
-}catch(e){log('fix failed: '+e.message,'err')}
+if(fixed.includes('<!DOCTYPE')){src=fixed.slice(fixed.indexOf('<!'));render();log('fix applied','o');testApp()}
+}catch(e){log('fix failed: '+e.message,'e')}
+};
+
+// Export
+const exp=()=>{
+if(!src)return;
+const b=new Blob([src],{type:'text/html'});
+const a=document.createElement('a');
+a.href=URL.createObjectURL(b);
+a.download=`genesis-${Date.now()}.html`;
+a.click();
+log('exported','o');
 };
 
 // Events
-document.getElementById('gen').onclick=gen;
+document.getElementById('gen').onclick=()=>generate(false);
+document.getElementById('iter').onclick=()=>generate(true);
 document.getElementById('fix').onclick=fix;
-document.getElementById('rnd').onclick=()=>{sel=null;document.querySelectorAll('.type').forEach(e=>e.classList.remove('sel'));gen()};
-document.getElementById('exp').onclick=()=>{if(!src)return;const b=new Blob([src],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='app.html';a.click()};
+document.getElementById('exp').onclick=exp;
 document.getElementById('cod').onclick=()=>document.getElementById('code').classList.toggle('show');
 
-setInterval(entropy,200);
-log('ready');
+setInterval(ent,200);
+loadModel();
 </script>
 </body>
 </html>

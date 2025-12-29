@@ -1,0 +1,220 @@
+<!--
+@udt file/1.0
+uuid: eom-core-doubleslit-001
+version: 0.1.0
+tokens: 250
+path: /core/double-slit.html
+parent: /core
+deps: [quantum.js, observer.js]
+tags: [consciousness]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Double Slit | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.experiment{display:flex;gap:2rem;flex-wrap:wrap;margin:1.5rem 0}
+canvas{border:1px solid rgba(255,255,255,0.2);border-radius:8px;background:#0a0a15}
+.panel{flex:1;min-width:200px}
+.observer-status{font-size:1.5rem;padding:1rem;border-radius:8px;text-align:center;margin-bottom:1rem;transition:all 0.3s}
+.observer-status.observed{background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#ef4444}
+.observer-status.unobserved{background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#22c55e}
+.stats{font-family:monospace;font-size:0.85rem}
+.stat{display:flex;justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.instructions{background:rgba(255,255,255,0.03);padding:1rem;border-radius:8px;margin-top:1rem;font-size:0.85rem}
+.legend{display:flex;gap:1rem;margin-top:1rem;font-size:0.8rem}
+.legend span{display:flex;align-items:center;gap:0.3rem}
+.dot{width:10px;height:10px;border-radius:50%}
+.controls{margin-top:1rem}
+button{padding:0.5rem 1rem;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:4px;cursor:pointer;margin-right:0.5rem}
+button:hover{border-color:var(--k)}
+</style>
+</head>
+<body>
+<nav><a href="./">← Core</a> | <a href="../">Home</a></nav>
+<main>
+<h1>🔬 Double Slit Experiment</h1>
+<p>Observation affects reality. Switch tabs to see the difference.</p>
+
+<div class="experiment">
+<div>
+<canvas id="slits" width="400" height="300"></canvas>
+<div class="legend">
+<span><div class="dot" style="background:#ef4444"></div> Observed (particle)</span>
+<span><div class="dot" style="background:#22c55e"></div> Unobserved (wave)</span>
+</div>
+<div class="controls">
+<button onclick="experiment.reset();draw()">Reset</button>
+<button onclick="fireMany(100)">Fire 100</button>
+</div>
+</div>
+
+<div class="panel">
+<div class="observer-status observed" id="status">
+👁️ OBSERVED
+</div>
+
+<div class="stats">
+<div class="stat"><span>Total Particles</span><span id="total">0</span></div>
+<div class="stat"><span>Observed Hits</span><span id="observed">0</span></div>
+<div class="stat"><span>Unobserved Hits</span><span id="unobserved">0</span></div>
+<div class="stat"><span>Frame Rate</span><span id="fps">0</span></div>
+<div class="stat"><span>RNG Deviation</span><span id="rng">0</span></div>
+<div class="stat"><span>Observation Score</span><span id="score">0</span></div>
+</div>
+
+<div class="instructions">
+<strong>How it works:</strong><br><br>
+<strong>When you watch</strong> (tab focused):<br>
+• Particles behave classically<br>
+• Each goes through ONE slit<br>
+• Two bands appear<br><br>
+<strong>When unobserved</strong> (switch tabs):<br>
+• Particles behave as waves<br>
+• Interference pattern emerges<br>
+• Wave-like bands appear<br><br>
+<em>Try: Fire particles, then switch to another tab and wait, then come back.</em>
+</div>
+</div>
+</div>
+
+<canvas id="pattern" width="400" height="100"></canvas>
+<p style="font-size:0.8rem;color:#666">Intensity pattern - left: observed (2 bands), right: interference (many bands)</p>
+</main>
+
+<script type="module">
+import { DoubleSlit } from './quantum.js';
+
+const experiment = new DoubleSlit({ width: 400, height: 300 });
+experiment.start();
+
+const slitsCanvas = document.getElementById('slits');
+const patternCanvas = document.getElementById('pattern');
+const slitsCtx = slitsCanvas.getContext('2d');
+const patternCtx = patternCanvas.getContext('2d');
+
+window.experiment = experiment;
+
+function draw() {
+  const { width, height } = slitsCanvas;
+  slitsCtx.fillStyle = '#0a0a15';
+  slitsCtx.fillRect(0, 0, width, height);
+
+  // Draw barrier with slits
+  slitsCtx.fillStyle = '#333';
+  slitsCtx.fillRect(width * 0.4, 0, 10, height);
+
+  // Draw slits
+  slitsCtx.fillStyle = '#0a0a15';
+  slitsCtx.fillRect(width * 0.4, experiment.slitY[0] - 10, 10, 20);
+  slitsCtx.fillRect(width * 0.4, experiment.slitY[1] - 10, 10, 20);
+
+  // Draw particles on detection screen
+  for (const p of experiment.particles) {
+    const x = width - 20;
+    const y = p.finalX;
+    slitsCtx.beginPath();
+    slitsCtx.arc(x, y, 2, 0, Math.PI * 2);
+    slitsCtx.fillStyle = p.observed ? 'rgba(239,68,68,0.7)' : 'rgba(34,197,94,0.7)';
+    slitsCtx.fill();
+  }
+
+  // Draw source
+  slitsCtx.beginPath();
+  slitsCtx.arc(20, height / 2, 8, 0, Math.PI * 2);
+  slitsCtx.fillStyle = '#f59e0b';
+  slitsCtx.fill();
+
+  // Draw pattern histogram
+  drawPattern();
+}
+
+function drawPattern() {
+  const { width, height } = patternCanvas;
+  patternCtx.fillStyle = '#0a0a15';
+  patternCtx.fillRect(0, 0, width, height);
+
+  experiment.updatePattern();
+  const max = Math.max(...experiment.pattern, 1);
+
+  // Draw observed pattern (left half)
+  const observedPattern = new Array(150).fill(0);
+  const unobservedPattern = new Array(150).fill(0);
+
+  for (const p of experiment.particles) {
+    const bin = Math.floor(p.finalX / 2);
+    if (bin >= 0 && bin < 150) {
+      if (p.observed) observedPattern[bin]++;
+      else unobservedPattern[bin]++;
+    }
+  }
+
+  const maxObs = Math.max(...observedPattern, 1);
+  const maxUnobs = Math.max(...unobservedPattern, 1);
+
+  // Observed (left)
+  patternCtx.fillStyle = '#ef4444';
+  for (let i = 0; i < 150; i++) {
+    const h = (observedPattern[i] / maxObs) * (height - 20);
+    patternCtx.fillRect(i + 10, height - h - 10, 1, h);
+  }
+
+  // Unobserved (right)
+  patternCtx.fillStyle = '#22c55e';
+  for (let i = 0; i < 150; i++) {
+    const h = (unobservedPattern[i] / maxUnobs) * (height - 20);
+    patternCtx.fillRect(i + 220, height - h - 10, 1, h);
+  }
+
+  // Labels
+  patternCtx.fillStyle = '#666';
+  patternCtx.font = '10px system-ui';
+  patternCtx.fillText('Observed', 60, 15);
+  patternCtx.fillText('Unobserved', 270, 15);
+}
+
+function updateStats() {
+  const stats = experiment.getStats();
+  document.getElementById('total').textContent = stats.total;
+  document.getElementById('observed').textContent = stats.observed;
+  document.getElementById('unobserved').textContent = stats.unobserved;
+
+  const statusEl = document.getElementById('status');
+  if (stats.isCurrentlyObserving) {
+    statusEl.textContent = '👁️ OBSERVED';
+    statusEl.className = 'observer-status observed';
+  } else {
+    statusEl.textContent = '🌊 UNOBSERVED';
+    statusEl.className = 'observer-status unobserved';
+  }
+
+  if (stats.observerStats) {
+    document.getElementById('fps').textContent = stats.observerStats.avgObservationScore?.toFixed(2) || '—';
+    document.getElementById('rng').textContent = stats.observerStats.avgRNGDeviation?.toFixed(3) || '—';
+    document.getElementById('score').textContent = (stats.observerStats.observedRatio * 100).toFixed(0) + '%';
+  }
+}
+
+window.fireMany = (n) => {
+  for (let i = 0; i < n; i++) {
+    setTimeout(() => {
+      experiment.fireParticle();
+      draw();
+      updateStats();
+    }, i * 20);
+  }
+};
+
+// Auto-fire particles
+setInterval(() => {
+  experiment.fireParticle();
+  draw();
+  updateStats();
+}, 100);
+
+draw();
+</script>
+</body>
+</html>

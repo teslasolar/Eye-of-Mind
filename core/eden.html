@@ -436,6 +436,7 @@
             if (!repos.length) throw new Error('No repos');
 
             status.textContent = `Growing ${repos.length} trees...`;
+            console.log(`Found ${repos.length} repos for ${username}`);
 
             // Load repos in batches
             const batch = repos.slice(0, 50);
@@ -450,15 +451,11 @@
                 const height = Math.max(6, Math.min(30, 8 + sizeFactor));
                 const radius = Math.max(0.4, Math.min(2, 0.5 + sizeFactor * 0.1));
 
-                // Try to load files
+                // Try to load files using repo's default branch
                 try {
-                    const treeRes = await fetch(`https://api.github.com/repos/${username}/${repo.name}/git/trees/main?recursive=1`);
+                    const branch = repo.default_branch || 'main';
+                    const treeRes = await fetch(`https://api.github.com/repos/${username}/${repo.name}/git/trees/${branch}?recursive=1`);
                     let data = treeRes.ok ? await treeRes.json() : null;
-
-                    if (!data?.tree) {
-                        const masterRes = await fetch(`https://api.github.com/repos/${username}/${repo.name}/git/trees/master?recursive=1`);
-                        data = masterRes.ok ? await masterRes.json() : null;
-                    }
 
                     if (data?.tree) {
                         const files = data.tree
@@ -469,10 +466,13 @@
                         if (files.length > 0) {
                             createTree(pos.x, pos.z, height, radius, files, `${username}/${repo.name}`);
                             loaded++;
+                            console.log(`✓ ${repo.name}: ${files.length} files`);
                         }
+                    } else {
+                        console.log(`○ ${repo.name}: no tree data`);
                     }
                 } catch (e) {
-                    // Skip failed repos
+                    console.warn(`✗ ${repo.name}: ${e.message}`);
                 }
 
                 // Update progress

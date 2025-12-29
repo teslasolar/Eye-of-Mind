@@ -1,0 +1,1795 @@
+<!--
+@udt file/1.0
+uuid: eom-draco-v4-a1b2c3d4
+version: 4.0.0
+tokens: 2800
+path: /core/draco-v4.html
+parent: /core/index.html
+deps: [three.js, web-llm, webxr]
+tags: [draco, dragon, ai, avatar, cinematic, physics, volumetric]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DRACO v4 | Eye of Mind</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+#canvas { position: fixed; inset: 0; }
+
+/* Holographic UI */
+.holo-panel {
+    position: fixed;
+    background: linear-gradient(135deg, rgba(0,200,255,0.08) 0%, rgba(100,0,255,0.08) 100%);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(0,200,255,0.3);
+    border-radius: 16px;
+    padding: 20px;
+    color: #fff;
+    box-shadow:
+        0 0 40px rgba(0,200,255,0.1),
+        inset 0 0 60px rgba(0,200,255,0.05);
+    animation: holoFlicker 4s ease-in-out infinite;
+}
+@keyframes holoFlicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.97; }
+    52% { opacity: 1; }
+}
+
+#controls {
+    top: 20px;
+    left: 20px;
+    width: 320px;
+    z-index: 100;
+}
+#chat-panel {
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    max-width: 600px;
+    z-index: 100;
+}
+#stats-panel {
+    top: 20px;
+    right: 20px;
+    width: 280px;
+    font-size: 12px;
+    z-index: 100;
+}
+#servo-panel {
+    bottom: 20px;
+    right: 20px;
+    width: 300px;
+    z-index: 100;
+}
+
+h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 15px;
+    color: #0cf;
+    text-shadow: 0 0 10px rgba(0,200,255,0.5);
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 6px;
+    border-left: 3px solid #0cf;
+}
+.stat-label { color: #888; }
+.stat-value { color: #0f0; font-family: 'Courier New', monospace; }
+
+.servo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+.servo-item {
+    background: rgba(0,0,0,0.4);
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid rgba(0,200,255,0.2);
+}
+.servo-name { font-size: 10px; color: #888; margin-bottom: 4px; }
+.servo-value {
+    font-size: 18px;
+    font-family: 'Courier New', monospace;
+    color: #0f0;
+    text-shadow: 0 0 10px rgba(0,255,0,0.5);
+}
+
+select, input, button {
+    width: 100%;
+    padding: 12px;
+    margin: 6px 0;
+    border: 1px solid rgba(0,200,255,0.3);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+select:hover, input:hover { border-color: rgba(0,200,255,0.6); }
+select:focus, input:focus {
+    outline: none;
+    border-color: #0cf;
+    box-shadow: 0 0 20px rgba(0,200,255,0.2);
+}
+
+button {
+    background: linear-gradient(135deg, rgba(0,200,255,0.3) 0%, rgba(100,0,255,0.3) 100%);
+    cursor: pointer;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+button:hover {
+    background: linear-gradient(135deg, rgba(0,200,255,0.5) 0%, rgba(100,0,255,0.5) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0,200,255,0.3);
+}
+button:active { transform: translateY(0); }
+
+#voice-btn {
+    background: linear-gradient(135deg, rgba(255,100,0,0.3) 0%, rgba(255,0,100,0.3) 100%);
+}
+#voice-btn.listening {
+    background: linear-gradient(135deg, rgba(255,0,0,0.5) 0%, rgba(255,100,0,0.5) 100%);
+    animation: pulse 1s infinite;
+}
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(255,0,0,0.3); }
+    50% { box-shadow: 0 0 40px rgba(255,0,0,0.6); }
+}
+
+#chat-log {
+    max-height: 150px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    padding: 10px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+#chat-log::-webkit-scrollbar { width: 6px; }
+#chat-log::-webkit-scrollbar-thumb { background: #0cf; border-radius: 3px; }
+
+.msg { margin: 8px 0; padding: 8px 12px; border-radius: 8px; }
+.msg.user { background: rgba(0,100,200,0.3); margin-left: 20%; }
+.msg.ai { background: rgba(100,0,200,0.3); margin-right: 20%; }
+.msg.system { color: #888; font-style: italic; text-align: center; }
+
+#thought-display {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    color: rgba(0,200,255,0.8);
+    text-shadow: 0 0 30px rgba(0,200,255,0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s;
+    text-align: center;
+    max-width: 80%;
+}
+#thought-display.visible { opacity: 1; }
+
+#mode-indicator {
+    position: fixed;
+    top: 50%;
+    right: 340px;
+    transform: translateY(-50%);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 48px;
+    color: rgba(0,200,255,0.15);
+    font-weight: bold;
+    letter-spacing: 10px;
+    pointer-events: none;
+}
+
+#loading {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.5s;
+}
+#loading.hidden { opacity: 0; pointer-events: none; }
+.loader {
+    width: 80px;
+    height: 80px;
+    border: 3px solid rgba(0,200,255,0.2);
+    border-top-color: #0cf;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { margin-top: 20px; color: #0cf; }
+
+/* Weather overlay */
+#weather-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+}
+
+/* Audio visualizer */
+#audio-viz {
+    position: fixed;
+    bottom: 200px;
+    left: 20px;
+    width: 280px;
+    height: 60px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 8px;
+    overflow: hidden;
+}
+</style>
+</head>
+<body>
+<div id="loading">
+    <div class="loader"></div>
+    <p>Awakening DRACO v4...</p>
+</div>
+
+<canvas id="canvas"></canvas>
+<canvas id="weather-overlay"></canvas>
+
+<div id="controls" class="holo-panel">
+    <h2>DRACO v4 Control</h2>
+    <select id="mood">
+        <option value="idle">Idle - Resting</option>
+        <option value="alert">Alert - Vigilant</option>
+        <option value="thinking">Thinking - Processing</option>
+        <option value="happy">Happy - Playful</option>
+        <option value="angry">Angry - Aggressive</option>
+        <option value="mystical">Mystical - Ethereal</option>
+        <option value="sleeping">Sleeping - Dormant</option>
+        <option value="flying">Flying - Soaring</option>
+    </select>
+    <select id="environment">
+        <option value="void">Void - Dark Space</option>
+        <option value="mountain">Mountain - Rocky Peak</option>
+        <option value="ocean">Ocean - Deep Waters</option>
+        <option value="volcano">Volcano - Molten Fire</option>
+        <option value="crystal">Crystal - Ice Cave</option>
+        <option value="nebula">Nebula - Cosmic</option>
+    </select>
+    <select id="weather">
+        <option value="clear">Clear</option>
+        <option value="rain">Rain</option>
+        <option value="storm">Storm + Lightning</option>
+        <option value="snow">Snow</option>
+        <option value="ash">Volcanic Ash</option>
+    </select>
+    <button id="breathe-btn">Dragon Breath</button>
+    <button id="roar-btn">Roar</button>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+        <button id="ik-toggle" style="flex:1">IK: ON</button>
+        <button id="physics-toggle" style="flex:1">Physics: ON</button>
+    </div>
+</div>
+
+<div id="stats-panel" class="holo-panel">
+    <h2>Neural Stats</h2>
+    <div class="stat-row"><span class="stat-label">FPS</span><span class="stat-value" id="fps">60</span></div>
+    <div class="stat-row"><span class="stat-label">Triangles</span><span class="stat-value" id="tris">0</span></div>
+    <div class="stat-row"><span class="stat-label">Draw Calls</span><span class="stat-value" id="draws">0</span></div>
+    <div class="stat-row"><span class="stat-label">Attention</span><span class="stat-value" id="attention">0.00</span></div>
+    <div class="stat-row"><span class="stat-label">Arousal</span><span class="stat-value" id="arousal">0.00</span></div>
+    <div class="stat-row"><span class="stat-label">Valence</span><span class="stat-value" id="valence">0.00</span></div>
+    <div class="stat-row"><span class="stat-label">Thinking</span><span class="stat-value" id="thinking-stat">idle</span></div>
+    <div class="stat-row"><span class="stat-label">Memory</span><span class="stat-value" id="memory">0 items</span></div>
+</div>
+
+<div id="servo-panel" class="holo-panel">
+    <h2>Servo Output (10ch)</h2>
+    <div class="servo-grid">
+        <div class="servo-item"><div class="servo-name">HEAD</div><div class="servo-value" id="s-head">90</div></div>
+        <div class="servo-item"><div class="servo-name">NECK</div><div class="servo-value" id="s-neck">90</div></div>
+        <div class="servo-item"><div class="servo-name">JAW</div><div class="servo-value" id="s-jaw">90</div></div>
+        <div class="servo-item"><div class="servo-name">EYES</div><div class="servo-value" id="s-eyes">90</div></div>
+        <div class="servo-item"><div class="servo-name">TAIL-1</div><div class="servo-value" id="s-tail1">90</div></div>
+        <div class="servo-item"><div class="servo-name">TAIL-2</div><div class="servo-value" id="s-tail2">90</div></div>
+        <div class="servo-item"><div class="servo-name">TAIL-3</div><div class="servo-value" id="s-tail3">90</div></div>
+        <div class="servo-item"><div class="servo-name">WING-L</div><div class="servo-value" id="s-wingL">90</div></div>
+        <div class="servo-item"><div class="servo-name">WING-R</div><div class="servo-value" id="s-wingR">90</div></div>
+        <div class="servo-item"><div class="servo-name">BREATH</div><div class="servo-value" id="s-breath">0</div></div>
+    </div>
+    <input type="text" id="esp-ip" placeholder="ESP32 IP (e.g., 192.168.1.100)">
+    <button id="connect-esp">Connect ESP32</button>
+</div>
+
+<div id="chat-panel" class="holo-panel">
+    <h2>Neural Link</h2>
+    <div id="chat-log"></div>
+    <div style="display:flex;gap:10px;">
+        <input type="text" id="chat-input" placeholder="Speak to DRACO...">
+        <button id="voice-btn" style="width:auto;padding:12px 20px;">🎤</button>
+    </div>
+</div>
+
+<div id="thought-display"></div>
+<div id="mode-indicator">DRACO</div>
+<div id="audio-viz"></div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+
+// ===================== STATE =====================
+const state = {
+    mood: 'idle',
+    environment: 'void',
+    weather: 'clear',
+    attention: 0.5,
+    arousal: 0.3,
+    valence: 0.5,
+    thinking: false,
+    thinkingPhase: 'idle',
+    ikEnabled: true,
+    physicsEnabled: true,
+    breathActive: false,
+    isFlying: false,
+    memory: [],
+    servoValues: { head: 90, neck: 90, jaw: 90, eyes: 90, tail1: 90, tail2: 90, tail3: 90, wingL: 90, wingR: 90, breath: 0 },
+    espSocket: null,
+    mouseTarget: new THREE.Vector3(),
+    voiceListening: false
+};
+
+// ===================== SCENE SETUP =====================
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(0, 8, 25);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.target.set(0, 5, 0);
+controls.maxPolarAngle = Math.PI * 0.85;
+
+// ===================== CUSTOM SHADERS =====================
+const volumetricLightShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        lightPosition: { value: new THREE.Vector2(0.5, 0.5) },
+        exposure: { value: 0.3 },
+        decay: { value: 0.95 },
+        density: { value: 0.8 },
+        weight: { value: 0.4 },
+        samples: { value: 50 }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 lightPosition;
+        uniform float exposure;
+        uniform float decay;
+        uniform float density;
+        uniform float weight;
+        uniform int samples;
+        varying vec2 vUv;
+
+        void main() {
+            vec2 texCoord = vUv;
+            vec2 deltaTextCoord = (texCoord - lightPosition) * (1.0 / float(samples)) * density;
+            vec4 color = texture2D(tDiffuse, texCoord);
+            float illuminationDecay = 1.0;
+
+            for(int i = 0; i < 50; i++) {
+                if(i >= samples) break;
+                texCoord -= deltaTextCoord;
+                vec4 samp = texture2D(tDiffuse, texCoord);
+                samp *= illuminationDecay * weight;
+                color += samp;
+                illuminationDecay *= decay;
+            }
+
+            gl_FragColor = color * exposure;
+        }
+    `
+};
+
+const chromaticAberrationShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        amount: { value: 0.003 }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float amount;
+        varying vec2 vUv;
+
+        void main() {
+            vec2 dir = vUv - vec2(0.5);
+            float dist = length(dir);
+            vec2 offset = dir * dist * amount;
+
+            vec4 cr = texture2D(tDiffuse, vUv + offset);
+            vec4 cg = texture2D(tDiffuse, vUv);
+            vec4 cb = texture2D(tDiffuse, vUv - offset);
+
+            gl_FragColor = vec4(cr.r, cg.g, cb.b, cg.a);
+        }
+    `
+};
+
+const scaleShaderMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        baseColor: { value: new THREE.Color(0x0066cc) },
+        time: { value: 0 },
+        iridescence: { value: 0.6 },
+        roughness: { value: 0.3 },
+        viewVector: { value: new THREE.Vector3() },
+        lightDir: { value: new THREE.Vector3(1, 1, 1).normalize() }
+    },
+    vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+
+        void main() {
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vViewPosition = -mvPosition.xyz;
+            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 baseColor;
+        uniform float time;
+        uniform float iridescence;
+        uniform float roughness;
+        uniform vec3 viewVector;
+        uniform vec3 lightDir;
+
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec2 vUv;
+        varying vec3 vWorldPosition;
+
+        vec3 iridescent(vec3 viewDir, vec3 normal, vec3 base) {
+            float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 4.0);
+            float phase = fresnel * 8.0 + time * 0.5;
+            vec3 iriColor = vec3(
+                sin(phase) * 0.5 + 0.5,
+                sin(phase + 2.094) * 0.5 + 0.5,
+                sin(phase + 4.188) * 0.5 + 0.5
+            );
+            return mix(base, iriColor, fresnel * iridescence);
+        }
+
+        void main() {
+            vec3 viewDir = normalize(vViewPosition);
+            vec3 normal = normalize(vNormal);
+
+            // Scale pattern
+            float scalePattern = sin(vUv.x * 40.0) * sin(vUv.y * 20.0) * 0.5 + 0.5;
+            vec3 color = baseColor * (0.8 + scalePattern * 0.4);
+
+            // Iridescence
+            color = iridescent(viewDir, normal, color);
+
+            // Lighting
+            float diffuse = max(dot(normal, lightDir), 0.0);
+            vec3 halfDir = normalize(lightDir + viewDir);
+            float spec = pow(max(dot(normal, halfDir), 0.0), 32.0);
+
+            // Rim light
+            float rim = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
+
+            vec3 finalColor = color * (0.3 + diffuse * 0.7) + vec3(1.0) * spec * 0.5 + vec3(0.2, 0.5, 1.0) * rim * 0.3;
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    `
+});
+
+const membraneShaderMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        baseColor: { value: new THREE.Color(0x002244) },
+        time: { value: 0 },
+        thickness: { value: 0.5 }
+    },
+    vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec2 vUv;
+
+        void main() {
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vViewPosition = -mvPosition.xyz;
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 baseColor;
+        uniform float time;
+        uniform float thickness;
+
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        varying vec2 vUv;
+
+        void main() {
+            vec3 viewDir = normalize(vViewPosition);
+            vec3 normal = normalize(vNormal);
+
+            // Subsurface scattering approximation
+            float sss = pow(max(dot(-viewDir, normal), 0.0), 2.0) * 0.5;
+
+            // Vein pattern
+            float veins = sin(vUv.x * 30.0 + sin(vUv.y * 10.0) * 2.0) * 0.5 + 0.5;
+            veins = smoothstep(0.4, 0.6, veins);
+
+            // Transparency based on viewing angle
+            float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.0);
+            float alpha = mix(0.3, 0.8, fresnel) * thickness;
+
+            vec3 veinColor = vec3(0.3, 0.0, 0.1);
+            vec3 color = mix(baseColor, veinColor, veins * 0.3);
+            color += vec3(1.0, 0.3, 0.2) * sss;
+            color += vec3(0.1, 0.3, 0.5) * fresnel;
+
+            gl_FragColor = vec4(color, alpha);
+        }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+});
+
+// ===================== POST PROCESSING =====================
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.4, 0.85);
+composer.addPass(bloomPass);
+
+const chromaticPass = new ShaderPass(chromaticAberrationShader);
+composer.addPass(chromaticPass);
+
+const smaaPass = new SMAAPass(innerWidth, innerHeight);
+composer.addPass(smaaPass);
+
+// ===================== LIGHTING =====================
+const ambientLight = new THREE.AmbientLight(0x222244, 0.5);
+scene.add(ambientLight);
+
+const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+mainLight.position.set(10, 20, 10);
+mainLight.castShadow = true;
+mainLight.shadow.mapSize.set(2048, 2048);
+mainLight.shadow.camera.near = 0.5;
+mainLight.shadow.camera.far = 100;
+mainLight.shadow.camera.left = -30;
+mainLight.shadow.camera.right = 30;
+mainLight.shadow.camera.top = 30;
+mainLight.shadow.camera.bottom = -30;
+mainLight.shadow.bias = -0.0001;
+scene.add(mainLight);
+
+const rimLight = new THREE.PointLight(0x0088ff, 2, 50);
+rimLight.position.set(-10, 15, -10);
+scene.add(rimLight);
+
+const breathLight = new THREE.PointLight(0xff4400, 0, 30);
+breathLight.position.set(0, 8, 8);
+scene.add(breathLight);
+
+// ===================== ENVIRONMENT =====================
+function createEnvironment(type) {
+    // Clear existing environment
+    scene.children.filter(c => c.userData.isEnvironment).forEach(c => scene.remove(c));
+
+    const envGroup = new THREE.Group();
+    envGroup.userData.isEnvironment = true;
+
+    switch(type) {
+        case 'void':
+            scene.background = new THREE.Color(0x000011);
+            scene.fog = new THREE.FogExp2(0x000011, 0.01);
+            // Starfield
+            const starsGeo = new THREE.BufferGeometry();
+            const starPositions = [];
+            for(let i = 0; i < 5000; i++) {
+                starPositions.push(
+                    (Math.random() - 0.5) * 500,
+                    (Math.random() - 0.5) * 500,
+                    (Math.random() - 0.5) * 500
+                );
+            }
+            starsGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+            const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true });
+            const stars = new THREE.Points(starsGeo, starsMat);
+            stars.userData.isEnvironment = true;
+            scene.add(stars);
+            break;
+
+        case 'mountain':
+            scene.background = new THREE.Color(0x334455);
+            scene.fog = new THREE.Fog(0x334455, 30, 150);
+            // Rocky ground
+            const groundGeo = new THREE.PlaneGeometry(200, 200, 100, 100);
+            const posAttr = groundGeo.attributes.position;
+            for(let i = 0; i < posAttr.count; i++) {
+                const x = posAttr.getX(i);
+                const y = posAttr.getY(i);
+                posAttr.setZ(i, Math.sin(x * 0.1) * Math.cos(y * 0.1) * 3 + Math.random() * 0.5);
+            }
+            groundGeo.computeVertexNormals();
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.9 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            envGroup.add(ground);
+            break;
+
+        case 'volcano':
+            scene.background = new THREE.Color(0x220000);
+            scene.fog = new THREE.Fog(0x220000, 20, 100);
+            mainLight.color.setHex(0xff4400);
+            // Lava glow
+            const lavaLight = new THREE.PointLight(0xff2200, 3, 100);
+            lavaLight.position.set(0, -5, 0);
+            envGroup.add(lavaLight);
+            break;
+
+        case 'crystal':
+            scene.background = new THREE.Color(0x001122);
+            scene.fog = new THREE.Fog(0x001122, 30, 150);
+            mainLight.color.setHex(0x88ccff);
+            // Ice crystals
+            for(let i = 0; i < 30; i++) {
+                const crystalGeo = new THREE.ConeGeometry(0.5 + Math.random(), 3 + Math.random() * 5, 6);
+                const crystalMat = new THREE.MeshPhysicalMaterial({
+                    color: 0x88ccff,
+                    transparent: true,
+                    opacity: 0.6,
+                    roughness: 0.1,
+                    transmission: 0.5
+                });
+                const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+                crystal.position.set(
+                    (Math.random() - 0.5) * 60,
+                    Math.random() * 2,
+                    (Math.random() - 0.5) * 60
+                );
+                crystal.rotation.z = (Math.random() - 0.5) * 0.5;
+                envGroup.add(crystal);
+            }
+            break;
+
+        case 'nebula':
+            scene.background = new THREE.Color(0x110022);
+            scene.fog = new THREE.FogExp2(0x110022, 0.008);
+            // Nebula particles
+            const nebulaGeo = new THREE.BufferGeometry();
+            const nebulaPos = [];
+            const nebulaColors = [];
+            for(let i = 0; i < 3000; i++) {
+                nebulaPos.push(
+                    (Math.random() - 0.5) * 200,
+                    (Math.random() - 0.5) * 200,
+                    (Math.random() - 0.5) * 200
+                );
+                const color = new THREE.Color().setHSL(Math.random() * 0.3 + 0.7, 0.8, 0.5);
+                nebulaColors.push(color.r, color.g, color.b);
+            }
+            nebulaGeo.setAttribute('position', new THREE.Float32BufferAttribute(nebulaPos, 3));
+            nebulaGeo.setAttribute('color', new THREE.Float32BufferAttribute(nebulaColors, 3));
+            const nebulaMat = new THREE.PointsMaterial({ size: 2, vertexColors: true, transparent: true, opacity: 0.6 });
+            const nebula = new THREE.Points(nebulaGeo, nebulaMat);
+            envGroup.add(nebula);
+            break;
+
+        default:
+            scene.background = new THREE.Color(0x001122);
+            scene.fog = new THREE.Fog(0x001122, 30, 150);
+    }
+
+    scene.add(envGroup);
+}
+
+// ===================== DRAGON CONSTRUCTION =====================
+const dragon = new THREE.Group();
+scene.add(dragon);
+
+// Physics simulation data
+const physicsNodes = [];
+const ikTargets = {};
+
+// Head with detailed skull
+function createHead() {
+    const headGroup = new THREE.Group();
+
+    // Main skull
+    const skullGeo = new THREE.SphereGeometry(1.5, 32, 24);
+    const posAttr = skullGeo.attributes.position;
+    for(let i = 0; i < posAttr.count; i++) {
+        const x = posAttr.getX(i);
+        const y = posAttr.getY(i);
+        const z = posAttr.getZ(i);
+        // Elongate snout
+        if(z > 0) {
+            posAttr.setZ(i, z * (1 + x * 0.3));
+        }
+        // Brow ridge
+        if(y > 0.5 && z > 0) {
+            posAttr.setY(i, y + Math.sin(z * 2) * 0.3);
+        }
+    }
+    skullGeo.computeVertexNormals();
+    const skull = new THREE.Mesh(skullGeo, scaleShaderMaterial);
+    skull.scale.set(1.2, 1, 1.8);
+    skull.castShadow = true;
+    headGroup.add(skull);
+
+    // Jaw (animated)
+    const jawGeo = new THREE.BoxGeometry(1.8, 0.4, 2.5);
+    const jaw = new THREE.Mesh(jawGeo, scaleShaderMaterial);
+    jaw.position.set(0, -0.6, 0.8);
+    jaw.name = 'jaw';
+    headGroup.add(jaw);
+
+    // Eyes
+    const eyeGeo = new THREE.SphereGeometry(0.3, 16, 16);
+    const eyeMat = new THREE.MeshPhysicalMaterial({
+        color: 0xffaa00,
+        emissive: 0xff6600,
+        emissiveIntensity: 0.5,
+        roughness: 0.1
+    });
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.6, 0.3, 0.8);
+    leftEye.name = 'leftEye';
+    headGroup.add(leftEye);
+
+    const rightEye = leftEye.clone();
+    rightEye.position.x = 0.6;
+    rightEye.name = 'rightEye';
+    headGroup.add(rightEye);
+
+    // Pupils (track mouse)
+    const pupilGeo = new THREE.SphereGeometry(0.15, 12, 12);
+    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const leftPupil = new THREE.Mesh(pupilGeo, pupilMat);
+    leftPupil.position.z = 0.2;
+    leftPupil.name = 'leftPupil';
+    leftEye.add(leftPupil);
+
+    const rightPupil = leftPupil.clone();
+    rightPupil.name = 'rightPupil';
+    rightEye.add(rightPupil);
+
+    // Horns using curved tubes
+    const hornCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0.3, 1, -0.2),
+        new THREE.Vector3(0.5, 2.5, -0.8),
+        new THREE.Vector3(0.3, 3.5, -1.2)
+    ]);
+    const hornGeo = new THREE.TubeGeometry(hornCurve, 20, 0.15, 8, false);
+    const hornMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.5 });
+
+    const leftHorn = new THREE.Mesh(hornGeo, hornMat);
+    leftHorn.position.set(-0.5, 0.8, -0.5);
+    leftHorn.castShadow = true;
+    headGroup.add(leftHorn);
+
+    const rightHorn = leftHorn.clone();
+    rightHorn.scale.x = -1;
+    rightHorn.position.x = 0.5;
+    headGroup.add(rightHorn);
+
+    // Nose/snout details
+    const nostrilGeo = new THREE.SphereGeometry(0.1, 8, 8);
+    const nostrilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const leftNostril = new THREE.Mesh(nostrilGeo, nostrilMat);
+    leftNostril.position.set(-0.3, 0, 2.5);
+    headGroup.add(leftNostril);
+    const rightNostril = leftNostril.clone();
+    rightNostril.position.x = 0.3;
+    headGroup.add(rightNostril);
+
+    // Teeth
+    const toothGeo = new THREE.ConeGeometry(0.08, 0.3, 6);
+    const toothMat = new THREE.MeshStandardMaterial({ color: 0xffffee });
+    for(let i = 0; i < 10; i++) {
+        const tooth = new THREE.Mesh(toothGeo, toothMat);
+        const angle = (i / 10) * Math.PI - Math.PI / 2;
+        tooth.position.set(Math.sin(angle) * 0.8, -0.3, 1 + Math.cos(angle) * 0.5);
+        tooth.rotation.x = Math.PI;
+        headGroup.add(tooth);
+    }
+
+    headGroup.position.y = 10;
+    headGroup.position.z = 5;
+
+    return headGroup;
+}
+
+// Neck with physics-enabled segments
+function createNeck() {
+    const neckGroup = new THREE.Group();
+    const segments = 8;
+
+    for(let i = 0; i < segments; i++) {
+        const t = i / segments;
+        const radius = 0.8 - t * 0.2;
+        const segGeo = new THREE.SphereGeometry(radius, 16, 12);
+        const seg = new THREE.Mesh(segGeo, scaleShaderMaterial);
+        seg.position.set(0, 8 - i * 0.4, 4 - i * 0.5);
+        seg.castShadow = true;
+        seg.userData.physicsIndex = physicsNodes.length;
+        physicsNodes.push({
+            mesh: seg,
+            velocity: new THREE.Vector3(),
+            restPosition: seg.position.clone(),
+            parent: i > 0 ? physicsNodes[physicsNodes.length - 1] : null
+        });
+        neckGroup.add(seg);
+    }
+
+    return neckGroup;
+}
+
+// Body with breathing animation
+function createBody() {
+    const bodyGroup = new THREE.Group();
+
+    // Main torso
+    const torsoGeo = new THREE.SphereGeometry(3, 32, 24);
+    const posAttr = torsoGeo.attributes.position;
+    for(let i = 0; i < posAttr.count; i++) {
+        const y = posAttr.getY(i);
+        const z = posAttr.getZ(i);
+        // Flatten bottom
+        if(y < -1) posAttr.setY(i, y * 0.5);
+        // Elongate
+        posAttr.setZ(i, z * 1.5);
+    }
+    torsoGeo.computeVertexNormals();
+    const torso = new THREE.Mesh(torsoGeo, scaleShaderMaterial);
+    torso.position.set(0, 4, -2);
+    torso.castShadow = true;
+    torso.name = 'torso';
+    bodyGroup.add(torso);
+
+    // Chest/belly
+    const chestGeo = new THREE.SphereGeometry(2.5, 24, 16);
+    const chestMat = scaleShaderMaterial.clone();
+    chestMat.uniforms.baseColor.value = new THREE.Color(0x004488);
+    const chest = new THREE.Mesh(chestGeo, chestMat);
+    chest.position.set(0, 3.5, 0);
+    chest.scale.set(0.8, 1, 1.2);
+    chest.name = 'chest';
+    bodyGroup.add(chest);
+
+    // Spine ridges
+    for(let i = 0; i < 15; i++) {
+        const ridgeGeo = new THREE.ConeGeometry(0.2, 0.8 + Math.sin(i * 0.5) * 0.3, 6);
+        const ridge = new THREE.Mesh(ridgeGeo, scaleShaderMaterial);
+        ridge.position.set(0, 5 + Math.sin(i * 0.3) * 0.5, -4 + i * 0.8);
+        ridge.rotation.x = -0.3;
+        ridge.castShadow = true;
+        bodyGroup.add(ridge);
+    }
+
+    return bodyGroup;
+}
+
+// Tail with full physics chain
+function createTail() {
+    const tailGroup = new THREE.Group();
+    const segments = 30;
+
+    for(let i = 0; i < segments; i++) {
+        const t = i / segments;
+        const radius = 0.6 * (1 - t * 0.8);
+        const segGeo = new THREE.SphereGeometry(radius, 12, 8);
+        const seg = new THREE.Mesh(segGeo, scaleShaderMaterial);
+
+        const angle = t * Math.PI * 0.5;
+        seg.position.set(
+            Math.sin(t * 2) * t * 2,
+            3 - t * 2,
+            -5 - i * 0.6
+        );
+        seg.castShadow = true;
+        seg.userData.physicsIndex = physicsNodes.length;
+        physicsNodes.push({
+            mesh: seg,
+            velocity: new THREE.Vector3(),
+            restPosition: seg.position.clone(),
+            parent: i > 0 ? physicsNodes[physicsNodes.length - 1] : null,
+            stiffness: 0.3 - t * 0.2,
+            damping: 0.8
+        });
+        tailGroup.add(seg);
+
+        // Tail spikes
+        if(i > 10 && i % 3 === 0) {
+            const spikeGeo = new THREE.ConeGeometry(0.1, 0.5, 6);
+            const spike = new THREE.Mesh(spikeGeo, scaleShaderMaterial);
+            spike.position.copy(seg.position);
+            spike.position.y += radius;
+            spike.rotation.x = -0.5;
+            tailGroup.add(spike);
+        }
+    }
+
+    // Tail tip - spade shape
+    const tipGeo = new THREE.BufferGeometry();
+    const tipVerts = new Float32Array([
+        0, 0, 0,  -0.5, 0.3, -1,  0.5, 0.3, -1,
+        0, 0, 0,  0.5, 0.3, -1,  0, -0.3, -1.5,
+        0, 0, 0,  0, -0.3, -1.5,  -0.5, 0.3, -1
+    ]);
+    tipGeo.setAttribute('position', new THREE.Float32BufferAttribute(tipVerts, 3));
+    tipGeo.computeVertexNormals();
+    const tip = new THREE.Mesh(tipGeo, scaleShaderMaterial);
+    tip.position.set(0, 1, -22);
+    tailGroup.add(tip);
+
+    return tailGroup;
+}
+
+// Wings with membrane and physics
+function createWing(isLeft) {
+    const wingGroup = new THREE.Group();
+    const side = isLeft ? 1 : -1;
+
+    // Wing bones
+    const boneGeo = new THREE.CylinderGeometry(0.15, 0.08, 8, 8);
+    const boneMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.5 });
+
+    // Upper arm
+    const upperArm = new THREE.Mesh(boneGeo, boneMat);
+    upperArm.rotation.z = side * Math.PI / 4;
+    upperArm.position.set(side * 4, 0, 0);
+    upperArm.castShadow = true;
+    wingGroup.add(upperArm);
+
+    // Forearm
+    const forearm = new THREE.Mesh(boneGeo, boneMat);
+    forearm.scale.y = 1.2;
+    forearm.rotation.z = side * Math.PI / 6;
+    forearm.position.set(side * 7, 3, 0);
+    wingGroup.add(forearm);
+
+    // Wing fingers
+    const fingerCurves = [
+        [new THREE.Vector3(0, 0, 0), new THREE.Vector3(side * 2, 3, 0), new THREE.Vector3(side * 5, 5, -1)],
+        [new THREE.Vector3(0, 0, 0), new THREE.Vector3(side * 3, 2, 0), new THREE.Vector3(side * 7, 3, -2)],
+        [new THREE.Vector3(0, 0, 0), new THREE.Vector3(side * 3, 0, 0), new THREE.Vector3(side * 8, -1, -3)],
+        [new THREE.Vector3(0, 0, 0), new THREE.Vector3(side * 2, -2, 0), new THREE.Vector3(side * 6, -4, -2)]
+    ];
+
+    const fingers = [];
+    fingerCurves.forEach((points, idx) => {
+        const curve = new THREE.CatmullRomCurve3(points);
+        const fingerGeo = new THREE.TubeGeometry(curve, 12, 0.08 - idx * 0.01, 6, false);
+        const finger = new THREE.Mesh(fingerGeo, boneMat);
+        finger.position.set(side * 8, 5, 0);
+        finger.castShadow = true;
+        fingers.push(finger);
+        wingGroup.add(finger);
+    });
+
+    // Wing membrane
+    const membraneShape = new THREE.Shape();
+    membraneShape.moveTo(0, 0);
+    membraneShape.lineTo(side * 3, 6);
+    membraneShape.bezierCurveTo(side * 8, 8, side * 12, 5, side * 13, 3);
+    membraneShape.bezierCurveTo(side * 14, 0, side * 13, -3, side * 10, -5);
+    membraneShape.bezierCurveTo(side * 6, -4, side * 2, -2, 0, 0);
+
+    const membraneGeo = new THREE.ShapeGeometry(membraneShape, 32);
+    const membrane = new THREE.Mesh(membraneGeo, membraneShaderMaterial);
+    membrane.position.set(side * 2, 3, 0.1);
+    membrane.name = isLeft ? 'leftMembrane' : 'rightMembrane';
+    wingGroup.add(membrane);
+
+    wingGroup.position.set(side * 2, 5, -2);
+    wingGroup.name = isLeft ? 'leftWing' : 'rightWing';
+
+    return wingGroup;
+}
+
+// Legs with IK
+function createLeg(isLeft) {
+    const legGroup = new THREE.Group();
+    const side = isLeft ? 1 : -1;
+
+    const thighGeo = new THREE.CylinderGeometry(0.4, 0.3, 2.5, 8);
+    const shinGeo = new THREE.CylinderGeometry(0.3, 0.2, 3, 8);
+    const footGeo = new THREE.BoxGeometry(0.8, 0.3, 1.2);
+
+    const legMat = scaleShaderMaterial;
+
+    const thigh = new THREE.Mesh(thighGeo, legMat);
+    thigh.position.set(side * 1.5, 2, -1);
+    thigh.rotation.x = 0.3;
+    thigh.name = isLeft ? 'leftThigh' : 'rightThigh';
+    legGroup.add(thigh);
+
+    const shin = new THREE.Mesh(shinGeo, legMat);
+    shin.position.set(side * 1.5, 0.5, -0.5);
+    shin.rotation.x = -0.3;
+    shin.name = isLeft ? 'leftShin' : 'rightShin';
+    legGroup.add(shin);
+
+    const foot = new THREE.Mesh(footGeo, legMat);
+    foot.position.set(side * 1.5, 0, 0.3);
+    foot.name = isLeft ? 'leftFoot' : 'rightFoot';
+    legGroup.add(foot);
+
+    // Claws
+    const clawGeo = new THREE.ConeGeometry(0.08, 0.4, 6);
+    const clawMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    for(let i = 0; i < 3; i++) {
+        const claw = new THREE.Mesh(clawGeo, clawMat);
+        claw.position.set(side * 1.5 + (i - 1) * 0.25, -0.1, 0.8);
+        claw.rotation.x = Math.PI / 2 + 0.3;
+        legGroup.add(claw);
+    }
+
+    // IK target
+    ikTargets[isLeft ? 'leftFoot' : 'rightFoot'] = new THREE.Vector3(side * 1.5, 0, 0.3);
+
+    return legGroup;
+}
+
+// Assemble dragon
+const head = createHead();
+const neck = createNeck();
+const body = createBody();
+const tail = createTail();
+const leftWing = createWing(true);
+const rightWing = createWing(false);
+const leftLeg = createLeg(true);
+const rightLeg = createLeg(false);
+
+dragon.add(head, neck, body, tail, leftWing, rightWing, leftLeg, rightLeg);
+
+// ===================== PARTICLE SYSTEMS =====================
+// Ambient particles
+const ambientParticles = new THREE.BufferGeometry();
+const ambientCount = 500;
+const ambientPositions = new Float32Array(ambientCount * 3);
+const ambientVelocities = [];
+
+for(let i = 0; i < ambientCount; i++) {
+    ambientPositions[i * 3] = (Math.random() - 0.5) * 50;
+    ambientPositions[i * 3 + 1] = Math.random() * 30;
+    ambientPositions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+    ambientVelocities.push(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.02,
+        (Math.random() - 0.5) * 0.02,
+        (Math.random() - 0.5) * 0.02
+    ));
+}
+ambientParticles.setAttribute('position', new THREE.Float32BufferAttribute(ambientPositions, 3));
+const ambientMat = new THREE.PointsMaterial({ color: 0x4488ff, size: 0.1, transparent: true, opacity: 0.6 });
+const ambientPoints = new THREE.Points(ambientParticles, ambientMat);
+scene.add(ambientPoints);
+
+// Fire breath particles
+const fireParticles = new THREE.BufferGeometry();
+const fireCount = 200;
+const firePositions = new Float32Array(fireCount * 3);
+const fireColors = new Float32Array(fireCount * 3);
+const fireSizes = new Float32Array(fireCount);
+const fireVelocities = [];
+const fireLifetimes = [];
+
+for(let i = 0; i < fireCount; i++) {
+    firePositions[i * 3] = 0;
+    firePositions[i * 3 + 1] = 0;
+    firePositions[i * 3 + 2] = 0;
+    fireVelocities.push(new THREE.Vector3());
+    fireLifetimes.push(0);
+    fireSizes[i] = 0;
+}
+fireParticles.setAttribute('position', new THREE.Float32BufferAttribute(firePositions, 3));
+fireParticles.setAttribute('color', new THREE.Float32BufferAttribute(fireColors, 3));
+fireParticles.setAttribute('size', new THREE.Float32BufferAttribute(fireSizes, 1));
+
+const fireMat = new THREE.PointsMaterial({
+    size: 1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true
+});
+const firePoints = new THREE.Points(fireParticles, fireMat);
+scene.add(firePoints);
+
+// ===================== WEATHER SYSTEM =====================
+const weatherCanvas = document.getElementById('weather-overlay');
+const weatherCtx = weatherCanvas.getContext('2d');
+weatherCanvas.width = innerWidth;
+weatherCanvas.height = innerHeight;
+
+const raindrops = [];
+const snowflakes = [];
+const ashParticles = [];
+
+function initWeather(type) {
+    raindrops.length = 0;
+    snowflakes.length = 0;
+    ashParticles.length = 0;
+
+    switch(type) {
+        case 'rain':
+            for(let i = 0; i < 500; i++) {
+                raindrops.push({
+                    x: Math.random() * innerWidth,
+                    y: Math.random() * innerHeight,
+                    speed: 15 + Math.random() * 10,
+                    length: 10 + Math.random() * 20
+                });
+            }
+            break;
+        case 'storm':
+            for(let i = 0; i < 800; i++) {
+                raindrops.push({
+                    x: Math.random() * innerWidth,
+                    y: Math.random() * innerHeight,
+                    speed: 20 + Math.random() * 15,
+                    length: 15 + Math.random() * 25
+                });
+            }
+            break;
+        case 'snow':
+            for(let i = 0; i < 300; i++) {
+                snowflakes.push({
+                    x: Math.random() * innerWidth,
+                    y: Math.random() * innerHeight,
+                    speed: 1 + Math.random() * 2,
+                    size: 2 + Math.random() * 4,
+                    wobble: Math.random() * Math.PI * 2
+                });
+            }
+            break;
+        case 'ash':
+            for(let i = 0; i < 200; i++) {
+                ashParticles.push({
+                    x: Math.random() * innerWidth,
+                    y: Math.random() * innerHeight,
+                    speed: 0.5 + Math.random() * 1.5,
+                    size: 3 + Math.random() * 5,
+                    rotation: Math.random() * Math.PI * 2
+                });
+            }
+            break;
+    }
+}
+
+function updateWeather(dt) {
+    weatherCtx.clearRect(0, 0, innerWidth, innerHeight);
+
+    // Rain
+    if(raindrops.length > 0) {
+        weatherCtx.strokeStyle = 'rgba(150, 180, 255, 0.5)';
+        weatherCtx.lineWidth = 1;
+        weatherCtx.beginPath();
+        raindrops.forEach(drop => {
+            drop.y += drop.speed;
+            drop.x -= 2; // Wind
+            if(drop.y > innerHeight) {
+                drop.y = -drop.length;
+                drop.x = Math.random() * innerWidth;
+            }
+            if(drop.x < 0) drop.x = innerWidth;
+            weatherCtx.moveTo(drop.x, drop.y);
+            weatherCtx.lineTo(drop.x + 2, drop.y + drop.length);
+        });
+        weatherCtx.stroke();
+
+        // Lightning for storm
+        if(state.weather === 'storm' && Math.random() < 0.005) {
+            weatherCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            weatherCtx.fillRect(0, 0, innerWidth, innerHeight);
+            // Flash the scene
+            mainLight.intensity = 5;
+            setTimeout(() => mainLight.intensity = 1.5, 100);
+        }
+    }
+
+    // Snow
+    snowflakes.forEach(flake => {
+        flake.y += flake.speed;
+        flake.wobble += 0.02;
+        flake.x += Math.sin(flake.wobble) * 0.5;
+        if(flake.y > innerHeight) {
+            flake.y = -flake.size;
+            flake.x = Math.random() * innerWidth;
+        }
+        weatherCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        weatherCtx.beginPath();
+        weatherCtx.arc(flake.x, flake.y, flake.size, 0, Math.PI * 2);
+        weatherCtx.fill();
+    });
+
+    // Ash
+    ashParticles.forEach(ash => {
+        ash.y += ash.speed;
+        ash.rotation += 0.02;
+        ash.x += Math.sin(ash.rotation) * 0.3;
+        if(ash.y > innerHeight) {
+            ash.y = -ash.size;
+            ash.x = Math.random() * innerWidth;
+        }
+        weatherCtx.fillStyle = 'rgba(80, 80, 80, 0.6)';
+        weatherCtx.save();
+        weatherCtx.translate(ash.x, ash.y);
+        weatherCtx.rotate(ash.rotation);
+        weatherCtx.fillRect(-ash.size/2, -ash.size/2, ash.size, ash.size);
+        weatherCtx.restore();
+    });
+}
+
+// ===================== AUDIO SYSTEM =====================
+let audioContext;
+let analyser;
+let audioData;
+
+function initAudio() {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    audioData = new Uint8Array(analyser.frequencyBinCount);
+}
+
+function playRoar() {
+    if(!audioContext) initAudio();
+
+    const osc1 = audioContext.createOscillator();
+    const osc2 = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'square';
+    osc1.frequency.setValueAtTime(80, audioContext.currentTime);
+    osc2.frequency.setValueAtTime(60, audioContext.currentTime);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(500, audioContext.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 1.5);
+
+    gain.gain.setValueAtTime(0.5, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 2);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioContext.destination);
+
+    osc1.start();
+    osc2.start();
+    osc1.stop(audioContext.currentTime + 2);
+    osc2.stop(audioContext.currentTime + 2);
+
+    // Visual effect
+    state.mood = 'angry';
+    document.getElementById('mood').value = 'angry';
+}
+
+// ===================== VOICE RECOGNITION =====================
+let recognition;
+if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        document.getElementById('chat-input').value = text;
+        handleChat(text);
+    };
+
+    recognition.onend = () => {
+        state.voiceListening = false;
+        document.getElementById('voice-btn').classList.remove('listening');
+    };
+}
+
+// Text-to-speech
+function speak(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.pitch = 0.5;
+    utterance.rate = 0.9;
+    speechSynthesis.speak(utterance);
+
+    // Show thought
+    const thought = document.getElementById('thought-display');
+    thought.textContent = text;
+    thought.classList.add('visible');
+    setTimeout(() => thought.classList.remove('visible'), 3000);
+}
+
+// ===================== PHYSICS SIMULATION =====================
+function updatePhysics(dt) {
+    if(!state.physicsEnabled) return;
+
+    physicsNodes.forEach((node, idx) => {
+        if(!node.parent) return;
+
+        const stiffness = node.stiffness || 0.3;
+        const damping = node.damping || 0.8;
+
+        // Spring force toward rest position relative to parent
+        const targetPos = node.parent.mesh.position.clone().add(
+            node.restPosition.clone().sub(node.parent.restPosition)
+        );
+
+        const force = targetPos.clone().sub(node.mesh.position).multiplyScalar(stiffness);
+        node.velocity.add(force);
+        node.velocity.multiplyScalar(damping);
+
+        // Add some noise for organic movement
+        const time = performance.now() * 0.001;
+        node.velocity.x += Math.sin(time * 2 + idx) * 0.01;
+        node.velocity.y += Math.cos(time * 1.5 + idx) * 0.005;
+
+        node.mesh.position.add(node.velocity.clone().multiplyScalar(dt));
+    });
+}
+
+// ===================== INVERSE KINEMATICS =====================
+function updateIK() {
+    if(!state.ikEnabled) return;
+
+    // Head looks at mouse position
+    const headTarget = state.mouseTarget.clone();
+    const headPos = head.position.clone();
+    const lookDir = headTarget.sub(headPos).normalize();
+
+    const targetRotY = Math.atan2(lookDir.x, lookDir.z);
+    const targetRotX = -Math.asin(lookDir.y);
+
+    head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, targetRotY * 0.5, 0.05);
+    head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, targetRotX * 0.3, 0.05);
+
+    // Eye tracking
+    const leftEye = head.getObjectByName('leftEye');
+    const rightEye = head.getObjectByName('rightEye');
+    if(leftEye && rightEye) {
+        const eyeLookDir = state.mouseTarget.clone().sub(head.position).normalize();
+        const pupilOffset = new THREE.Vector3(eyeLookDir.x * 0.1, eyeLookDir.y * 0.1, 0.2);
+
+        const leftPupil = leftEye.getObjectByName('leftPupil');
+        const rightPupil = rightEye.getObjectByName('rightPupil');
+        if(leftPupil) leftPupil.position.lerp(pupilOffset, 0.1);
+        if(rightPupil) rightPupil.position.lerp(pupilOffset, 0.1);
+    }
+}
+
+// ===================== ANIMATION =====================
+function animateDragon(time) {
+    const t = time * 0.001;
+
+    // Breathing
+    const chest = body.getObjectByName('chest');
+    const torso = body.getObjectByName('torso');
+    if(chest && torso) {
+        const breathe = Math.sin(t * 2) * 0.05 + 1;
+        chest.scale.set(0.8 * breathe, breathe, 1.2 * breathe);
+        torso.scale.y = 1 + Math.sin(t * 2) * 0.02;
+    }
+
+    // Wing animation based on mood
+    const wingFlapSpeed = state.mood === 'flying' ? 4 : (state.mood === 'alert' ? 2 : 1);
+    const wingFlapAmount = state.mood === 'flying' ? 0.8 : (state.mood === 'idle' ? 0.1 : 0.3);
+
+    leftWing.rotation.z = Math.sin(t * wingFlapSpeed) * wingFlapAmount + 0.3;
+    rightWing.rotation.z = -Math.sin(t * wingFlapSpeed) * wingFlapAmount - 0.3;
+
+    // Jaw animation when speaking
+    const jaw = head.getObjectByName('jaw');
+    if(jaw) {
+        const jawTarget = speechSynthesis.speaking ? Math.sin(t * 20) * 0.3 : 0;
+        jaw.rotation.x = THREE.MathUtils.lerp(jaw.rotation.x, jawTarget, 0.3);
+    }
+
+    // Tail wave
+    const tailWave = state.mood === 'happy' ? 0.3 : (state.mood === 'angry' ? 0.5 : 0.1);
+    tail.rotation.y = Math.sin(t * 2) * tailWave;
+
+    // Flying bob
+    if(state.mood === 'flying') {
+        dragon.position.y = Math.sin(t) * 2 + 3;
+    } else {
+        dragon.position.y = THREE.MathUtils.lerp(dragon.position.y, 0, 0.05);
+    }
+
+    // Update shader uniforms
+    scaleShaderMaterial.uniforms.time.value = t;
+    scaleShaderMaterial.uniforms.viewVector.value = camera.position.clone().sub(dragon.position).normalize();
+    membraneShaderMaterial.uniforms.time.value = t;
+
+    // Mood colors
+    const moodColors = {
+        idle: 0x0066cc,
+        alert: 0x00ccff,
+        thinking: 0x6600cc,
+        happy: 0x00cc66,
+        angry: 0xcc3300,
+        mystical: 0xcc00cc,
+        sleeping: 0x003366,
+        flying: 0x0099ff
+    };
+    scaleShaderMaterial.uniforms.baseColor.value.setHex(moodColors[state.mood] || 0x0066cc);
+}
+
+function updateFireBreath(time) {
+    if(!state.breathActive) {
+        // Fade out
+        const sizes = fireParticles.attributes.size.array;
+        for(let i = 0; i < fireCount; i++) {
+            sizes[i] *= 0.9;
+        }
+        fireParticles.attributes.size.needsUpdate = true;
+        breathLight.intensity *= 0.9;
+        return;
+    }
+
+    const positions = fireParticles.attributes.position.array;
+    const colors = fireParticles.attributes.color.array;
+    const sizes = fireParticles.attributes.size.array;
+
+    const mouthPos = head.position.clone().add(new THREE.Vector3(0, 0, 3));
+
+    for(let i = 0; i < fireCount; i++) {
+        fireLifetimes[i] -= 0.016;
+
+        if(fireLifetimes[i] <= 0) {
+            // Respawn
+            positions[i * 3] = mouthPos.x + (Math.random() - 0.5) * 0.5;
+            positions[i * 3 + 1] = mouthPos.y + (Math.random() - 0.5) * 0.5;
+            positions[i * 3 + 2] = mouthPos.z;
+
+            fireVelocities[i].set(
+                (Math.random() - 0.5) * 2,
+                (Math.random() - 0.5) * 2 + 1,
+                8 + Math.random() * 4
+            );
+            fireLifetimes[i] = 0.5 + Math.random() * 0.5;
+            sizes[i] = 0.5 + Math.random() * 0.5;
+        }
+
+        // Update position
+        positions[i * 3] += fireVelocities[i].x * 0.1;
+        positions[i * 3 + 1] += fireVelocities[i].y * 0.1;
+        positions[i * 3 + 2] += fireVelocities[i].z * 0.1;
+
+        // Color gradient
+        const life = fireLifetimes[i];
+        if(life > 0.3) {
+            colors[i * 3] = 1;
+            colors[i * 3 + 1] = 0.8;
+            colors[i * 3 + 2] = 0.2;
+        } else {
+            colors[i * 3] = 1;
+            colors[i * 3 + 1] = life * 2;
+            colors[i * 3 + 2] = 0;
+        }
+
+        // Size falloff
+        sizes[i] = Math.max(0, sizes[i] - 0.02);
+    }
+
+    fireParticles.attributes.position.needsUpdate = true;
+    fireParticles.attributes.color.needsUpdate = true;
+    fireParticles.attributes.size.needsUpdate = true;
+
+    breathLight.position.copy(mouthPos).add(new THREE.Vector3(0, 0, 5));
+    breathLight.intensity = 3 + Math.sin(time * 0.01) * 1;
+}
+
+// ===================== SERVO OUTPUT =====================
+function updateServos() {
+    const headRotY = THREE.MathUtils.radToDeg(head.rotation.y);
+    const headRotX = THREE.MathUtils.radToDeg(head.rotation.x);
+    const jaw = head.getObjectByName('jaw');
+    const jawAngle = jaw ? THREE.MathUtils.radToDeg(jaw.rotation.x) : 0;
+
+    state.servoValues = {
+        head: Math.round(90 + headRotY),
+        neck: Math.round(90 + headRotX * 2),
+        jaw: Math.round(90 + jawAngle * 3),
+        eyes: Math.round(90 + headRotY * 0.5),
+        tail1: Math.round(90 + THREE.MathUtils.radToDeg(tail.rotation.y) * 2),
+        tail2: Math.round(90 + Math.sin(performance.now() * 0.003) * 30),
+        tail3: Math.round(90 + Math.sin(performance.now() * 0.002) * 20),
+        wingL: Math.round(90 + THREE.MathUtils.radToDeg(leftWing.rotation.z) * 30),
+        wingR: Math.round(90 - THREE.MathUtils.radToDeg(rightWing.rotation.z) * 30),
+        breath: state.breathActive ? 180 : 0
+    };
+
+    // Update UI
+    Object.entries(state.servoValues).forEach(([key, value]) => {
+        const el = document.getElementById(`s-${key}`);
+        if(el) el.textContent = value;
+    });
+
+    // Send to ESP32
+    if(state.espSocket && state.espSocket.readyState === WebSocket.OPEN) {
+        state.espSocket.send(JSON.stringify(state.servoValues));
+    }
+}
+
+// ===================== CHAT / AI =====================
+const chatLog = document.getElementById('chat-log');
+let llmEngine = null;
+
+function addMessage(text, type) {
+    const msg = document.createElement('div');
+    msg.className = `msg ${type}`;
+    msg.textContent = text;
+    chatLog.appendChild(msg);
+    chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+async function handleChat(text) {
+    if(!text.trim()) return;
+
+    addMessage(text, 'user');
+    document.getElementById('chat-input').value = '';
+
+    // Add to memory
+    state.memory.push({ role: 'user', content: text, time: Date.now() });
+    document.getElementById('memory').textContent = `${state.memory.length} items`;
+
+    state.thinking = true;
+    state.thinkingPhase = 'processing';
+    state.mood = 'thinking';
+    document.getElementById('mood').value = 'thinking';
+    document.getElementById('thinking-stat').textContent = 'processing...';
+
+    // Simple response without WebLLM for faster demo
+    // In production, integrate WebLLM here
+    setTimeout(() => {
+        const responses = [
+            "I sense your presence, mortal. The flames of knowledge burn within me.",
+            "Interesting query. My ancient wisdom suggests careful consideration.",
+            "The winds of fate carry your words to my ears. I shall ponder this.",
+            "My scales tingle with the energy of your thoughts. Fascinating.",
+            "Through the veil of time, I perceive the answer forming..."
+        ];
+
+        const response = responses[Math.floor(Math.random() * responses.length)];
+        addMessage(response, 'ai');
+        speak(response);
+
+        state.memory.push({ role: 'assistant', content: response, time: Date.now() });
+        state.thinking = false;
+        state.thinkingPhase = 'idle';
+        state.mood = 'idle';
+        document.getElementById('mood').value = 'idle';
+        document.getElementById('thinking-stat').textContent = 'idle';
+    }, 1500);
+}
+
+// ===================== EVENT HANDLERS =====================
+document.getElementById('mood').addEventListener('change', (e) => {
+    state.mood = e.target.value;
+    document.getElementById('mode-indicator').textContent = state.mood.toUpperCase();
+});
+
+document.getElementById('environment').addEventListener('change', (e) => {
+    state.environment = e.target.value;
+    createEnvironment(e.target.value);
+});
+
+document.getElementById('weather').addEventListener('change', (e) => {
+    state.weather = e.target.value;
+    initWeather(e.target.value);
+});
+
+document.getElementById('breathe-btn').addEventListener('click', () => {
+    state.breathActive = !state.breathActive;
+    document.getElementById('breathe-btn').textContent = state.breathActive ? 'Stop Breath' : 'Dragon Breath';
+});
+
+document.getElementById('roar-btn').addEventListener('click', playRoar);
+
+document.getElementById('ik-toggle').addEventListener('click', (e) => {
+    state.ikEnabled = !state.ikEnabled;
+    e.target.textContent = `IK: ${state.ikEnabled ? 'ON' : 'OFF'}`;
+});
+
+document.getElementById('physics-toggle').addEventListener('click', (e) => {
+    state.physicsEnabled = !state.physicsEnabled;
+    e.target.textContent = `Physics: ${state.physicsEnabled ? 'ON' : 'OFF'}`;
+});
+
+document.getElementById('connect-esp').addEventListener('click', () => {
+    const ip = document.getElementById('esp-ip').value;
+    if(!ip) return;
+    try {
+        state.espSocket = new WebSocket(`ws://${ip}/ws`);
+        state.espSocket.onopen = () => addMessage('Connected to ESP32', 'system');
+        state.espSocket.onerror = () => addMessage('ESP32 connection failed', 'system');
+    } catch(e) {
+        addMessage('Invalid IP address', 'system');
+    }
+});
+
+document.getElementById('voice-btn').addEventListener('click', () => {
+    if(!recognition) {
+        addMessage('Speech recognition not supported', 'system');
+        return;
+    }
+    if(state.voiceListening) {
+        recognition.stop();
+    } else {
+        recognition.start();
+        state.voiceListening = true;
+        document.getElementById('voice-btn').classList.add('listening');
+    }
+});
+
+document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') handleChat(e.target.value);
+});
+
+// Mouse tracking for IK
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -10);
+    const target = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, target);
+
+    if(target) state.mouseTarget.copy(target);
+});
+
+// Resize
+window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
+    weatherCanvas.width = innerWidth;
+    weatherCanvas.height = innerHeight;
+});
+
+// ===================== MAIN LOOP =====================
+let lastTime = 0;
+let frameCount = 0;
+let fpsTime = 0;
+
+function animate(time) {
+    requestAnimationFrame(animate);
+
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+
+    // FPS counter
+    frameCount++;
+    if(time - fpsTime > 1000) {
+        document.getElementById('fps').textContent = frameCount;
+        frameCount = 0;
+        fpsTime = time;
+    }
+
+    // Update systems
+    controls.update();
+    updatePhysics(dt);
+    updateIK();
+    animateDragon(time);
+    updateFireBreath(time);
+    updateServos();
+    updateWeather(dt);
+
+    // Update ambient particles
+    const ambientPos = ambientParticles.attributes.position.array;
+    for(let i = 0; i < ambientCount; i++) {
+        ambientPos[i * 3] += ambientVelocities[i].x;
+        ambientPos[i * 3 + 1] += ambientVelocities[i].y;
+        ambientPos[i * 3 + 2] += ambientVelocities[i].z;
+
+        // Wrap around
+        if(Math.abs(ambientPos[i * 3]) > 25) ambientVelocities[i].x *= -1;
+        if(ambientPos[i * 3 + 1] < 0 || ambientPos[i * 3 + 1] > 30) ambientVelocities[i].y *= -1;
+        if(Math.abs(ambientPos[i * 3 + 2]) > 25) ambientVelocities[i].z *= -1;
+    }
+    ambientParticles.attributes.position.needsUpdate = true;
+
+    // Stats
+    document.getElementById('tris').textContent = renderer.info.render.triangles.toLocaleString();
+    document.getElementById('draws').textContent = renderer.info.render.calls;
+    document.getElementById('attention').textContent = state.attention.toFixed(2);
+    document.getElementById('arousal').textContent = state.arousal.toFixed(2);
+    document.getElementById('valence').textContent = state.valence.toFixed(2);
+
+    // Render
+    composer.render();
+}
+
+// ===================== INIT =====================
+createEnvironment('void');
+document.getElementById('loading').classList.add('hidden');
+addMessage('DRACO v4 awakens. Speak, and I shall listen.', 'system');
+animate(0);
+
+</script>
+</body>
+</html>

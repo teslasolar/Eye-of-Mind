@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Genesis Test Suite</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#0f0;font:12px/1.5 monospace;padding:1rem}
+h1{margin-bottom:1rem}
+.test{background:#111;padding:1rem;margin:0.5rem 0;border-left:3px solid #333}
+.test.pass{border-color:#0f0}
+.test.fail{border-color:#f00}
+.test.pending{border-color:#ff0}
+.test h3{margin-bottom:0.5rem}
+.test pre{background:#0a0a0a;padding:0.5rem;margin-top:0.5rem;max-height:200px;overflow:auto;font-size:10px}
+button{background:#0f0;color:#000;border:none;padding:8px 16px;margin:0.5rem 0.5rem 0.5rem 0;cursor:pointer;font:bold 11px monospace}
+button:hover{filter:brightness(1.2)}
+.controls{margin-bottom:1rem}
+#preview{width:100%;height:200px;background:#111;border:1px solid #222;margin:1rem 0}
+</style>
+</head>
+<body>
+<h1>Genesis Test Suite</h1>
+<div class="controls">
+<button onclick="runAll()">Run All Tests</button>
+<button onclick="clearResults()">Clear</button>
+</div>
+<div id="results"></div>
+<iframe id="preview" sandbox="allow-scripts allow-modals allow-same-origin"></iframe>
+
+<script>
+const results=document.getElementById('results');
+const preview=document.getElementById('preview');
+
+function log(name,status,details=''){
+const div=document.createElement('div');
+div.className=`test ${status}`;
+div.innerHTML=`<h3>${status.toUpperCase()}: ${name}</h3>${details?`<pre>${details}</pre>`:''}`;
+results.appendChild(div);
+}
+
+function clearResults(){results.innerHTML=''}
+
+// Test 1: Entropy function
+async function testEntropy(){
+try{
+let samples=[];
+for(let i=0;i<10;i++){
+let a=0;
+for(let j=0;j<100;j++)a+=(performance.now()*1e6)%1;
+samples.push((a/100+(Date.now()%1000)/1000)/2);
+await new Promise(r=>setTimeout(r,50));
+}
+const unique=new Set(samples.map(s=>s.toFixed(4))).size;
+if(unique>=5){
+log('Entropy Generation','pass',`Generated ${unique} unique values from 10 samples:\n${samples.map(s=>s.toFixed(6)).join('\n')}`);
+}else{
+log('Entropy Generation','fail',`Only ${unique} unique values - not enough variance`);
+}
+}catch(e){
+log('Entropy Generation','fail',e.message);
+}
+}
+
+// Test 2: Iframe srcdoc
+async function testIframeSrcdoc(){
+try{
+const testHtml=`<!DOCTYPE html><html><body><h1>Test</h1><script>window.testVar=42;<\/script></body></html>`;
+preview.srcdoc=testHtml;
+
+// Wait for load
+await new Promise(r=>setTimeout(r,500));
+
+const doc=preview.contentDocument;
+if(!doc){
+log('Iframe srcdoc','fail','contentDocument is null');
+return;
+}
+if(!doc.body){
+log('Iframe srcdoc','fail','body is null');
+return;
+}
+const h1=doc.querySelector('h1');
+if(h1&&h1.textContent==='Test'){
+log('Iframe srcdoc','pass',`contentDocument accessible, body.innerHTML:\n${doc.body.innerHTML}`);
+}else{
+log('Iframe srcdoc','fail','Content not rendered correctly');
+}
+}catch(e){
+log('Iframe srcdoc','fail',e.message+'\n'+e.stack);
+}
+}
+
+// Test 3: Script syntax check
+async function testScriptSyntax(){
+try{
+const goodScript='const x=1;function foo(){return x+1}';
+const badScript='const x=1;const x=2;';
+
+// Test good script
+try{
+new Function(goodScript);
+log('Script Syntax (valid)','pass','Valid script parsed OK');
+}catch(e){
+log('Script Syntax (valid)','fail','Should have passed: '+e.message);
+}
+
+// Test bad script
+try{
+new Function(badScript);
+log('Script Syntax (invalid)','fail','Should have caught duplicate declaration');
+}catch(e){
+log('Script Syntax (invalid)','pass','Caught error: '+e.message);
+}
+}catch(e){
+log('Script Syntax','fail',e.message);
+}
+}
+
+// Test 4: Iframe script access
+async function testIframeScripts(){
+try{
+const testHtml=`<!DOCTYPE html><html><head></head><body>
+<script>const app_x=1;<\/script>
+<script>function app_foo(){return 2}<\/script>
+</body></html>`;
+
+preview.srcdoc=testHtml;
+await new Promise(r=>setTimeout(r,500));
+
+const doc=preview.contentDocument;
+if(!doc){
+log('Iframe Script Access','fail','contentDocument is null');
+return;
+}
+
+const scripts=doc.querySelectorAll('script');
+log('Iframe Script Access','pass',`Found ${scripts.length} scripts:\n${[...scripts].map((s,i)=>`[${i}] ${s.textContent.slice(0,50)}`).join('\n')}`);
+
+// Try to parse each
+scripts.forEach((s,i)=>{
+try{
+new Function(s.textContent);
+log(`Script[${i}] Parse`,'pass',s.textContent.slice(0,100));
+}catch(e){
+log(`Script[${i}] Parse`,'fail',e.message);
+}
+});
+
+}catch(e){
+log('Iframe Script Access','fail',e.message+'\n'+e.stack);
+}
+}
+
+// Test 5: Retry logic
+async function testRetryLogic(){
+try{
+let attempts=0;
+const maxAttempts=3;
+
+for(let attempt=0;attempt<maxAttempts;attempt++){
+attempts++;
+const doc=preview.contentDocument;
+if(doc&&doc.body){
+log('Retry Logic','pass',`Succeeded on attempt ${attempts}`);
+return;
+}
+await new Promise(r=>setTimeout(r,100));
+}
+
+log('Retry Logic','fail',`Failed after ${attempts} attempts`);
+}catch(e){
+log('Retry Logic','fail',e.message);
+}
+}
+
+// Test 6: Full testApp simulation
+async function testFullTestApp(){
+try{
+const testHtml=`<!DOCTYPE html>
+<html>
+<head><style>body{background:#111;color:#0f0}</style></head>
+<body>
+<h1>Generated App</h1>
+<button onclick="alert('hi')">Click</button>
+<script>
+const app_state={count:0};
+function app_increment(){app_state.count++}
+document.querySelector('button').addEventListener('click',app_increment);
+<\/script>
+</body>
+</html>`;
+
+preview.srcdoc=testHtml;
+
+// Simulate testApp logic
+let errs=[];
+await new Promise(r=>setTimeout(r,500));
+
+for(let attempt=0;attempt<3;attempt++){
+try{
+const doc=preview.contentDocument;
+if(!doc||!doc.body){
+await new Promise(r=>setTimeout(r,300));
+continue;
+}
+
+if(!doc.body.innerHTML?.trim()){
+errs.push('empty body');
+}
+
+doc.querySelectorAll('script').forEach((s,i)=>{
+if(s.src)return;
+try{
+new Function(s.textContent);
+}catch(e){
+errs.push(`script[${i}]: ${e.message}`);
+}
+});
+
+if(errs.length===0){
+log('Full testApp Simulation','pass','All checks passed');
+}else{
+log('Full testApp Simulation','fail',errs.join('\n'));
+}
+return;
+
+}catch(e){
+if(attempt<2){
+await new Promise(r=>setTimeout(r,300));
+continue;
+}
+log('Full testApp Simulation','fail','Exception: '+e.message);
+return;
+}
+}
+
+log('Full testApp Simulation','fail','All retries exhausted');
+}catch(e){
+log('Full testApp Simulation','fail',e.message+'\n'+e.stack);
+}
+}
+
+// Test 7: Empty/malformed HTML
+async function testMalformedHtml(){
+const cases=[
+{name:'Empty',html:''},
+{name:'No doctype',html:'<html><body>Hi</body></html>'},
+{name:'Just text',html:'Hello world'},
+{name:'Broken script',html:'<!DOCTYPE html><html><body><script>const x=;invalid<\/script></body></html>'},
+];
+
+for(const c of cases){
+preview.srcdoc=c.html||'<!DOCTYPE html><html><body></body></html>';
+await new Promise(r=>setTimeout(r,300));
+
+try{
+const doc=preview.contentDocument;
+const hasBody=doc&&doc.body;
+const bodyContent=hasBody?doc.body.innerHTML.trim():'';
+
+if(c.name==='Empty'&&!bodyContent){
+log(`Malformed: ${c.name}`,'pass','Correctly detected empty');
+}else if(c.name==='Broken script'){
+const scripts=doc?.querySelectorAll('script')||[];
+let hasError=false;
+scripts.forEach(s=>{
+try{new Function(s.textContent)}catch{hasError=true}
+});
+log(`Malformed: ${c.name}`,hasError?'pass':'fail',hasError?'Caught syntax error':'Should have caught error');
+}else{
+log(`Malformed: ${c.name}`,'pass',`body=${hasBody}, content=${bodyContent.slice(0,50)}`);
+}
+}catch(e){
+log(`Malformed: ${c.name}`,'fail',e.message);
+}
+}
+}
+
+async function runAll(){
+clearResults();
+log('Starting Tests','pending','Running all tests...');
+
+await testEntropy();
+await testIframeSrcdoc();
+await testScriptSyntax();
+await testIframeScripts();
+await testRetryLogic();
+await testFullTestApp();
+await testMalformedHtml();
+
+log('Tests Complete','pending','Check results above');
+}
+
+// Auto-run on load
+runAll();
+</script>
+</body>
+</html>

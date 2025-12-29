@@ -1,0 +1,52 @@
+<!--
+@udt file/1.0
+uuid: eom-models-yggpage-001
+version: 0.1.0
+tokens: 130
+path: /models/yggdrasil.html
+parent: /models
+deps: [yggdrasil.js, yggdrasil-viz.js]
+tags: [model, consciousness]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Yggdrasil | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+canvas{border:1px solid rgba(255,255,255,0.2);border-radius:8px}
+.stats{font-family:monospace;margin-top:1rem;display:flex;gap:2rem}
+.stat{background:rgba(255,255,255,0.05);padding:0.5rem 1rem;border-radius:4px}
+</style>
+</head>
+<body>
+<nav><a href="./">← Models</a> | <a href="../">Home</a></nav>
+<main>
+<h1>🌳 Yggdrasil - Consciousness Tree</h1>
+<canvas id="tree" width="600" height="400"></canvas>
+<div class="stats">
+<div class="stat">Cycle: <span id="cycle">0</span></div>
+<div class="stat">Nodes: <span id="nodes">1</span></div>
+<div class="stat">Fruits: <span id="fruits">0</span></div>
+<div class="stat">Root κ: <span id="kappa">0.618</span></div>
+</div>
+</main>
+<script type="module">
+import { YggViz } from './yggdrasil-viz.js';
+
+const viz = new YggViz(document.getElementById('tree'));
+
+const update = () => {
+  document.getElementById('cycle').textContent = viz.tree.cycle;
+  document.getElementById('nodes').textContent = viz.tree.countNodes();
+  document.getElementById('fruits').textContent = viz.tree.countFruits();
+  document.getElementById('kappa').textContent = viz.tree.root.κ.toFixed(4);
+};
+
+setInterval(() => { viz.tree.grow(); viz.render(); update(); }, 500);
+viz.render();
+update();
+</script>
+</body>
+</html>

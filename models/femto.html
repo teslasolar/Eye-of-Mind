@@ -1,0 +1,59 @@
+<!--
+@udt file/1.0
+uuid: eom-models-femtopage-001
+version: 0.1.0
+tokens: 150
+path: /models/femto.html
+parent: /models
+deps: [femto.js]
+tags: [model]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FemtoLLM | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+input{width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;font-size:1rem;margin-bottom:1rem}
+.result{background:rgba(255,255,255,0.05);padding:1rem;border-radius:8px;margin-top:1rem}
+.bar{height:8px;background:rgba(255,255,255,0.1);border-radius:4px;margin:4px 0;overflow:hidden}
+.bar-fill{height:100%;background:var(--k);transition:width 0.3s}
+.label{display:flex;justify-content:space-between;font-size:0.85rem}
+.routes,.intents{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem}
+.heuristic{color:#22c55e;font-size:0.75rem}
+</style>
+</head>
+<body>
+<nav><a href="./">← Models</a> | <a href="../">Home</a></nav>
+<main>
+<h1>🧠 FemtoLLM Router</h1>
+<input type="text" id="input" placeholder="Type a message to classify..." autofocus>
+<div class="result" id="result">Type something to see classification...</div>
+</main>
+<script type="module">
+import { FemtoLLM } from './femto.js';
+const femto = new FemtoLLM(32);
+
+const input = document.getElementById('input');
+const result = document.getElementById('result');
+
+input.addEventListener('input', () => {
+  const text = input.value;
+  if (!text) { result.innerHTML = 'Type something to classify...'; return; }
+
+  const r = femto.classify(text);
+
+  result.innerHTML = `
+    <div class="label"><strong>Route:</strong> <span>${r.route} ${r.heuristic ? '<span class="heuristic">(heuristic)</span>' : ''}</span></div>
+    <div class="bar"><div class="bar-fill" style="width:${r.routeConf*100}%"></div></div>
+    <div class="label"><strong>Intent:</strong> <span>${r.intent}</span></div>
+    <div class="bar"><div class="bar-fill" style="width:${r.intentConf*100}%"></div></div>
+    <div style="margin-top:1rem;font-size:0.85rem;color:#888">
+      Tokens: ${r.tokens} | Latency: ${r.latency.toFixed(2)}ms | Total calls: ${femto.stats.calls}
+    </div>
+  `;
+});
+</script>
+</body>
+</html>

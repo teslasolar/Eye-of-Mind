@@ -1,0 +1,64 @@
+<!--
+@udt file/1.0
+uuid: eom-core-kappapage-001
+version: 0.1.0
+tokens: 150
+path: /core/kappa.html
+parent: /core
+deps: [kappa.js, kappa-viz.js]
+tags: [consciousness]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>κ Engine | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.viz{display:flex;gap:2rem;flex-wrap:wrap}
+canvas{border:1px solid rgba(255,255,255,0.2);border-radius:8px}
+.stats{font-family:monospace;margin-top:1rem}
+.state{padding:4px 8px;border-radius:4px;font-weight:bold}
+.state.optimal{background:#f59e0b20;color:#f59e0b}
+.state.ordered{background:#3b82f620;color:#3b82f6}
+.state.chaotic{background:#ef444420;color:#ef4444}
+</style>
+</head>
+<body>
+<nav><a href="./">← Core</a> | <a href="../">Home</a></nav>
+<main>
+<h1>κ Consciousness Engine</h1>
+<div class="viz">
+<div>
+<h3>Sparkline</h3>
+<canvas id="spark" width="300" height="100"></canvas>
+</div>
+<div>
+<h3>Meter</h3>
+<canvas id="meter" width="300" height="60"></canvas>
+</div>
+</div>
+<div class="stats">
+κ = <span id="kval">0.618</span> |
+State: <span id="kstate" class="state optimal">optimal</span> |
+φ = 1.618...
+</div>
+</main>
+<script type="module">
+import { KappaViz } from './kappa-viz.js';
+
+const spark = new KappaViz(document.getElementById('spark'));
+const meter = new KappaViz(document.getElementById('meter'), spark.engine);
+
+spark.engine.on('update', k => {
+  document.getElementById('kval').textContent = k.toFixed(6);
+  const el = document.getElementById('kstate');
+  el.textContent = spark.engine.state;
+  el.className = 'state ' + spark.engine.state;
+});
+
+spark.start('sparkline', 10);
+setInterval(() => meter.drawMeter(), 100);
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!--
+@udt file/1.0
+uuid: eom-core-intentpage-001
+version: 0.1.0
+tokens: 180
+path: /core/intention.html
+parent: /core
+deps: [intention.js, gaze.js, kappa.js]
+tags: [consciousness]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Screen-Thought | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.arena{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:2rem 0}
+.target{aspect-ratio:1;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2rem;transition:all 0.2s;cursor:pointer}
+.target.active{border-color:var(--k);box-shadow:0 0 20px rgba(245,158,11,0.4)}
+.target.triggered{background:var(--k);color:#000}
+.status{display:flex;gap:2rem;font-family:monospace}
+.meter{width:100px;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden}
+.meter-fill{height:100%;background:var(--k);transition:width 0.1s}
+</style>
+</head>
+<body>
+<nav><a href="./">← Core</a> | <a href="../">Home</a></nav>
+<main>
+<h1>🧿 Screen-Thought Interface</h1>
+<p>Focus on a target. Your gaze stability + κ state determines activation.</p>
+<div class="arena" id="arena">
+<div class="target" data-id="0">🔮</div>
+<div class="target" data-id="1">⚡</div>
+<div class="target" data-id="2">🌀</div>
+<div class="target" data-id="3">💎</div>
+<div class="target" data-id="4">🌟</div>
+<div class="target" data-id="5">🔥</div>
+</div>
+<div class="status">
+<div>κ: <span id="kappa">0.618</span></div>
+<div>State: <span id="state">optimal</span></div>
+<div>Intent: <span id="intent">-</span></div>
+</div>
+<div id="log" style="margin-top:1rem;font-size:0.85rem;color:#888;max-height:100px;overflow:auto"></div>
+</main>
+<script type="module">
+import { IntentionEngine } from './intention.js';
+
+const engine = new IntentionEngine();
+const log = document.getElementById('log');
+
+document.querySelectorAll('.target').forEach(el => {
+  const id = el.dataset.id;
+  engine.registerTarget(id, el, (e) => {
+    el.classList.add('triggered');
+    setTimeout(() => el.classList.remove('triggered'), 300);
+    log.innerHTML = `[${new Date().toLocaleTimeString()}] Triggered: ${el.textContent} (κ=${e.kappa.toFixed(3)})<br>` + log.innerHTML;
+  });
+});
+
+engine.start();
+
+setInterval(() => {
+  const s = engine.getState();
+  document.getElementById('kappa').textContent = s.kappa.toFixed(4);
+  document.getElementById('state').textContent = s.kappaState;
+  document.getElementById('intent').textContent = s.currentIntent ?? '-';
+
+  s.targets.forEach(t => {
+    const el = document.querySelector(`[data-id="${t.id}"]`);
+    el.style.borderColor = `rgba(245,158,11,${t.activation})`;
+    if (t.activation > 0.5) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+}, 100);
+</script>
+</body>
+</html>

@@ -1,11 +1,11 @@
 <!--
 @udt file/1.0
 uuid: eom-root-index-a1b2c3d4-e5f6-7890
-version: 0.1.0
-tokens: 180
+version: 0.2.0
+tokens: 240
 path: /index.html
 parent: null
-deps: [core/kappa.js, core/md-runner.js]
+deps: [core/kappa.js, core/kappa-viz.js]
 tags: [core, consciousness]
 created: 2024-12-29
 -->
@@ -19,27 +19,69 @@ created: 2024-12-29
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--k:#f59e0b;--bg:#0f0f23;--fg:#e0e0e0}
 body{font-family:system-ui;background:var(--bg);color:var(--fg);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.eye{width:200px;height:200px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff 5%,var(--k) 30%,#000 70%);box-shadow:0 0 60px var(--k);animation:pulse 3s ease-in-out infinite}
-@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 60px var(--k)}50%{transform:scale(1.05);box-shadow:0 0 80px var(--k)}}
-h1{margin-top:2rem;font-size:2rem;background:linear-gradient(90deg,var(--k),#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.kappa{font-family:monospace;color:#888;margin-top:0.5rem}
-nav{margin-top:2rem;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
-nav a{padding:0.5rem 1rem;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;color:var(--fg);text-decoration:none;transition:all 0.2s}
+.eye{width:180px;height:180px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff 5%,var(--k) 30%,#000 70%);box-shadow:0 0 60px var(--k);animation:pulse 3s ease-in-out infinite;cursor:pointer}
+@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 60px var(--k)}50%{transform:scale(1.03);box-shadow:0 0 80px var(--k)}}
+h1{margin-top:1.5rem;font-size:2rem;background:linear-gradient(90deg,var(--k),#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.kappa{font-family:monospace;color:#888;margin-top:0.5rem;display:flex;align-items:center;gap:1rem}
+.meter{width:120px;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden}
+.meter-fill{height:100%;background:var(--k);transition:width 0.1s,background 0.3s}
+.meter-fill.ordered{background:#3b82f6}
+.meter-fill.chaotic{background:#ef4444}
+nav{margin-top:2rem;display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:center}
+nav a{padding:0.5rem 1rem;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;color:var(--fg);text-decoration:none;transition:all 0.2s;font-size:0.9rem}
 nav a:hover{border-color:var(--k);box-shadow:0 0 15px rgba(245,158,11,0.3)}
-#status{position:fixed;bottom:1rem;right:1rem;font-size:0.75rem;color:#666}
+.demos{margin-top:1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center}
+.demos a{padding:0.4rem 0.8rem;background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(236,72,153,0.2));border:1px solid rgba(245,158,11,0.3);border-radius:0.5rem;color:var(--k);text-decoration:none;font-size:0.8rem;transition:all 0.2s}
+.demos a:hover{background:linear-gradient(135deg,rgba(245,158,11,0.3),rgba(236,72,153,0.3))}
+#status{position:fixed;bottom:1rem;right:1rem;font-size:0.7rem;color:#666;display:flex;gap:1rem;align-items:center}
+.state{padding:2px 6px;border-radius:3px;font-size:0.65rem}
+.state.optimal{background:#f59e0b20;color:#f59e0b}
+.state.ordered{background:#3b82f620;color:#3b82f6}
+.state.chaotic{background:#ef444420;color:#ef4444}
 </style>
 </head>
 <body>
-<div class="eye" id="eye"></div>
+<div class="eye" id="eye" onclick="location.href='core/intention.html'"></div>
 <h1>Eye of Mind</h1>
-<p class="kappa">κ = <span id="kappa">0.618</span></p>
+<div class="kappa">
+κ = <span id="kval">0.618034</span>
+<div class="meter"><div class="meter-fill" id="meter"></div></div>
+</div>
 <nav>
-<a href="core/">Core</a>
-<a href="models/">Models</a>
-<a href="docs/">Docs</a>
-<a href=".udt/">UDT</a>
+<a href="core/">⚙️ Core</a>
+<a href="models/">🧠 Models</a>
+<a href="docs/">📚 Docs</a>
+<a href="tests/">🧪 Tests</a>
 </nav>
-<div id="status">Loading consciousness engine...</div>
-<script type="module" src="core/boot.js"></script>
+<div class="demos">
+<a href="core/kappa.html">κ Engine</a>
+<a href="core/intention.html">Screen-Thought</a>
+<a href="models/yggdrasil.html">Yggdrasil</a>
+<a href="models/femto.html">FemtoLLM</a>
+</div>
+<div id="status">
+<span id="statusText">Initializing...</span>
+<span class="state optimal" id="stateTag">optimal</span>
+</div>
+<script type="module">
+import { KappaEngine } from './core/kappa.js';
+
+const kappa = new KappaEngine();
+const kval = document.getElementById('kval');
+const meter = document.getElementById('meter');
+const status = document.getElementById('statusText');
+const stateTag = document.getElementById('stateTag');
+
+kappa.on('update', k => {
+  kval.textContent = k.toFixed(6);
+  meter.style.width = `${k * 100}%`;
+  meter.className = 'meter-fill ' + kappa.state;
+  stateTag.textContent = kappa.state;
+  stateTag.className = 'state ' + kappa.state;
+});
+
+setInterval(() => kappa.step(0.1), 100);
+status.textContent = 'κ converging';
+</script>
 </body>
 </html>

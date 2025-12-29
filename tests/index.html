@@ -1,0 +1,53 @@
+<!--
+@udt file/1.0
+uuid: eom-tests-index-001
+version: 0.1.0
+tokens: 120
+path: /tests/index.html
+parent: /
+deps: [runner.js]
+tags: [core, runner]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tests | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.pass{color:#22c55e}.fail{color:#ef4444}
+pre{background:#1a1a2e;padding:1rem;max-height:400px;overflow:auto}
+#run{padding:0.5rem 1rem;background:var(--k);border:none;border-radius:4px;cursor:pointer}
+</style>
+</head>
+<body>
+<nav><a href="../">← Home</a></nav>
+<main>
+<h1>🧪 Test Suite</h1>
+<button id="run" onclick="runTests()">Run All Tests</button>
+<pre id="output">Click "Run All Tests" to start...</pre>
+</main>
+<script type="module">
+import kappaTests from './kappa.test.js';
+import udtTests from './udt.test.js';
+import mdTests from './md-runner.test.js';
+
+window.runTests = async () => {
+  const out = document.getElementById('output');
+  out.textContent = '';
+  const log = s => out.textContent += s + '\n';
+
+  log('=== Kappa Tests ===');
+  await kappaTests.run();
+
+  log('\n=== UDT Tests ===');
+  await udtTests.run();
+
+  log('\n=== MD Runner Tests ===');
+  await mdTests.run();
+
+  log('\n✅ All test suites complete');
+};
+</script>
+</body>
+</html>

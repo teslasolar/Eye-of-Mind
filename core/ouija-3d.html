@@ -1,10 +1,8 @@
 <!--
 @udt file/1.0
 uuid: eom-core-ouija3d-001
-version: 0.1.0
-tokens: 250
+version: 0.2.0
 path: /core/ouija-3d.html
-parent: /core
 deps: [oracle.js]
 tags: [consciousness, 3d, divination]
 -->
@@ -15,11 +13,13 @@ tags: [consciousness, 3d, divination]
 <title>Ouija 3D | Eye of Mind</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a0f;overflow:hidden;font-family:system-ui}
+body{background:#0a0a0f;overflow:hidden;font-family:system-ui;cursor:pointer}
 canvas{display:block}
 #message{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
   font-size:2rem;font-family:'Times New Roman',serif;letter-spacing:0.3em;
   color:#d4af37;text-shadow:0 0 20px rgba(212,175,55,0.5);min-width:300px;text-align:center}
+#hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  color:#d4af37;font-size:1.2rem;opacity:0.8;pointer-events:none;transition:opacity 0.5s}
 #status{position:fixed;top:20px;right:20px;font-size:12px;color:#666;font-family:monospace}
 #nav{position:fixed;bottom:20px;left:20px}
 #nav a{color:#444;text-decoration:none;font-size:12px}
@@ -29,8 +29,9 @@ canvas{display:block}
 </style>
 </head>
 <body>
+<div id="hint">click a letter to begin</div>
 <div id="message"></div>
-<div id="status">initializing...</div>
+<div id="status">click to sync</div>
 <button id="clear">clear</button>
 <div id="nav"><a href="./">← Core</a></div>
 
@@ -48,6 +49,9 @@ let currentPos = {x:0, y:0};
 let dwellTime = 0;
 let lastSymbol = null;
 let selecting = false;
+let synced = false;
+let sampleCount = 0;
+let entropyAccum = 0;
 
 // Board layout
 const symbols = [
@@ -60,7 +64,7 @@ const symbols = [
   {char:'Y',x:-1,y:-0.4},{char:'Z',x:-0.5,y:-0.4},{char:'0',x:0.5,y:-0.4},{char:'1',x:1,y:-0.4},
   {char:'2',x:1.5,y:-0.4},{char:'3',x:2,y:-0.4},{char:'4',x:-2.5,y:-1.1},{char:'5',x:-2,y:-1.1},
   {char:'6',x:-1.5,y:-1.1},{char:'7',x:-1,y:-1.1},{char:'8',x:-0.5,y:-1.1},{char:'9',x:0,y:-1.1},
-  {char:'YES',x:1.5,y:-1.1},{char:'NO',x:2.5,y:-1.1},{char:' ',x:0,y:-1.8}
+  {char:'YES',x:1.5,y:-1.1},{char:'NO',x:2.5,y:-1.1},{char:'_',x:0,y:-1.8}
 ];
 
 // Scene
@@ -75,6 +79,10 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
+// Raycaster for clicks
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
 // Board
 const boardGeo = new THREE.BoxGeometry(7, 0.2, 5);
 const boardMat = new THREE.MeshStandardMaterial({color:0x2a1810,roughness:0.8});
@@ -83,7 +91,6 @@ board.position.y = -0.1;
 scene.add(board);
 
 // Symbols on board
-const loader = new THREE.TextureLoader();
 const canvas2d = document.createElement('canvas');
 canvas2d.width = 1024; canvas2d.height = 512;
 const ctx = canvas2d.getContext('2d');
@@ -92,6 +99,7 @@ ctx.fillRect(0,0,1024,512);
 ctx.font = 'bold 28px Times New Roman';
 ctx.fillStyle = '#d4af37';
 ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
 
 symbols.forEach(s => {
   const px = (s.x + 3.5) / 7 * 1024;
@@ -115,14 +123,16 @@ const planchMat = new THREE.MeshStandardMaterial({
 });
 const planchette = new THREE.Mesh(planchGeo, planchMat);
 planchette.position.y = 0.15;
+planchette.visible = false;
 scene.add(planchette);
 
-// Glow ring under planchette
+// Glow ring
 const ringGeo = new THREE.RingGeometry(0.25, 0.35, 32);
 const ringMat = new THREE.MeshBasicMaterial({color:0xd4af37, transparent:true, opacity:0.3});
 const ring = new THREE.Mesh(ringGeo, ringMat);
 ring.rotation.x = -Math.PI/2;
 ring.position.y = 0.02;
+ring.visible = false;
 scene.add(ring);
 
 // Lighting
@@ -134,7 +144,7 @@ const candle2 = new THREE.PointLight(0xff6600, 30, 10);
 candle2.position.set(3, 2, -2);
 scene.add(candle2);
 
-// Find nearest symbol
+// Find nearest symbol to position
 function nearestSymbol(x, y) {
   let best = null, bestDist = Infinity;
   for (const s of symbols) {
@@ -144,88 +154,136 @@ function nearestSymbol(x, y) {
   return best;
 }
 
-// Oracle drives movement
+// Pick next target using entropy
+function pickNextTarget() {
+  const seed = entropyAccum * 1000000;
+  const idx = Math.floor(Math.abs(seed) % symbols.length);
+  const target = symbols[idx];
+  targetPos.x = target.x;
+  targetPos.y = target.y;
+  entropyAccum = 0;
+}
+
+// Click handler - sync to clicked position
+renderer.domElement.addEventListener('click', (e) => {
+  mouse.x = (e.clientX / innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(board);
+
+  if (hits.length > 0) {
+    const pt = hits[0].point;
+    // Convert 3D point to board coords
+    const bx = pt.x;
+    const by = -pt.z;
+
+    // Find nearest symbol
+    const sym = nearestSymbol(bx, by);
+    if (sym) {
+      // Sync planchette to this position
+      currentPos.x = sym.x;
+      currentPos.y = sym.y;
+      targetPos.x = sym.x;
+      targetPos.y = sym.y;
+
+      if (!synced) {
+        synced = true;
+        planchette.visible = true;
+        ring.visible = true;
+        document.getElementById('hint').style.opacity = '0';
+        oracle.calibrate(3);
+        oracle.start(100);
+      }
+
+      document.getElementById('status').textContent = `synced: ${sym.char}`;
+    }
+  }
+});
+
+// Oracle entropy accumulation
 oracle.on('sample', (s) => {
-  if (s.isWatched === null) return;
+  if (!synced) return;
 
   const entropy = s.entropy || {};
   const v = entropy.execVariance || 0;
   const d = entropy.clockDrift || 0;
   const r = entropy.rngTiming || 0;
 
-  // Use entropy to nudge target position
-  const angle = ((v * 100000) % 1) * Math.PI * 2;
-  const magnitude = 0.15 + (d * 10000) % 0.1;
+  // Accumulate entropy
+  entropyAccum += v + d * 1000 + r * 100;
+  sampleCount++;
 
-  targetPos.x += Math.cos(angle) * magnitude;
-  targetPos.y += Math.sin(angle) * magnitude;
-
-  // Bounds
-  targetPos.x = Math.max(-3, Math.min(3, targetPos.x));
-  targetPos.y = Math.max(-2, Math.min(1.5, targetPos.y));
+  // Every N samples, pick a new target
+  if (sampleCount >= 8) {
+    pickNextTarget();
+    sampleCount = 0;
+  }
 
   // Status
+  const near = nearestSymbol(currentPos.x, currentPos.y);
   document.getElementById('status').textContent =
-    `v:${v.toFixed(5)} | conf:${(s.confidence*100).toFixed(0)}%`;
+    `${near?.char || '?'} | e:${entropyAccum.toFixed(3)}`;
 });
-
-// Start oracle
-setTimeout(() => {
-  oracle.calibrate(3);
-  oracle.start(80);
-}, 500);
 
 // Animation
 function animate() {
   requestAnimationFrame(animate);
 
-  // Smooth follow
-  currentPos.x += (targetPos.x - currentPos.x) * 0.05;
-  currentPos.y += (targetPos.y - currentPos.y) * 0.05;
+  if (synced) {
+    // Smooth movement toward target
+    currentPos.x += (targetPos.x - currentPos.x) * 0.03;
+    currentPos.y += (targetPos.y - currentPos.y) * 0.03;
 
-  planchette.position.x = currentPos.x;
-  planchette.position.z = -currentPos.y;
-  ring.position.x = currentPos.x;
-  ring.position.z = -currentPos.y;
+    planchette.position.x = currentPos.x;
+    planchette.position.z = -currentPos.y;
+    ring.position.x = currentPos.x;
+    ring.position.z = -currentPos.y;
 
-  // Check dwell on symbol
-  const sym = nearestSymbol(currentPos.x, currentPos.y);
-  if (sym && Math.hypot(sym.x - currentPos.x, sym.y - currentPos.y) < 0.4) {
-    if (sym === lastSymbol) {
-      dwellTime++;
-      ring.material.opacity = Math.min(0.8, 0.3 + dwellTime/60);
-      if (dwellTime > 45 && !selecting) {
-        selecting = true;
-        message += sym.char;
-        document.getElementById('message').textContent = message;
-        planchMat.emissive.setHex(0x886600);
-        setTimeout(() => {
-          planchMat.emissive.setHex(0x442200);
-          selecting = false;
-        }, 200);
+    // Check dwell on symbol
+    const sym = nearestSymbol(currentPos.x, currentPos.y);
+    const dist = sym ? Math.hypot(sym.x - currentPos.x, sym.y - currentPos.y) : 999;
+
+    if (dist < 0.15) {
+      if (sym === lastSymbol) {
+        dwellTime++;
+        ring.material.opacity = Math.min(0.9, 0.3 + dwellTime/40);
+
+        if (dwellTime > 35 && !selecting) {
+          selecting = true;
+          const ch = sym.char === '_' ? ' ' : sym.char;
+          message += ch;
+          document.getElementById('message').textContent = message;
+          planchMat.emissive.setHex(0xaa8800);
+
+          setTimeout(() => {
+            planchMat.emissive.setHex(0x442200);
+            selecting = false;
+            dwellTime = 0;
+          }, 300);
+        }
+      } else {
+        lastSymbol = sym;
+        dwellTime = 0;
       }
     } else {
-      lastSymbol = sym;
-      dwellTime = 0;
+      dwellTime = Math.max(0, dwellTime - 1);
       ring.material.opacity = 0.3;
     }
-  } else {
-    dwellTime = 0;
-    ring.material.opacity = 0.3;
   }
 
   // Candle flicker
   candle1.intensity = 25 + Math.random() * 10;
   candle2.intensity = 25 + Math.random() * 10;
 
-  // Subtle camera sway
-  camera.position.x = Math.sin(Date.now() * 0.0003) * 0.2;
+  // Camera sway
+  camera.position.x = Math.sin(Date.now() * 0.0003) * 0.15;
 
   renderer.render(scene, camera);
 }
 animate();
 
-// Clear button
+// Clear
 document.getElementById('clear').onclick = () => {
   message = '';
   document.getElementById('message').textContent = '';

@@ -1,0 +1,187 @@
+<!--
+@udt file/1.0
+uuid: eom-core-oracle3d-001
+version: 0.1.0
+tokens: 250
+path: /core/oracle-3d.html
+parent: /core
+deps: [oracle.js]
+tags: [consciousness, 3d]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Oracle 3D | Eye of Mind</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:system-ui}
+canvas{display:block}
+#hud{position:fixed;top:20px;left:20px;color:#fff;font-size:12px;font-family:monospace;opacity:0.7}
+#status{position:fixed;top:20px;right:20px;padding:8px 16px;border-radius:20px;font-size:14px}
+.watched{background:rgba(239,68,68,0.3);color:#ef4444}
+.unwatched{background:rgba(34,197,94,0.3);color:#22c55e}
+.calibrating{background:rgba(251,191,36,0.3);color:#fbbf24}
+#nav{position:fixed;bottom:20px;left:20px}
+#nav a{color:#666;text-decoration:none;font-size:12px}
+</style>
+</head>
+<body>
+<div id="hud">
+<div>variance: <span id="var">—</span></div>
+<div>drift: <span id="drift">—</span></div>
+<div>conf: <span id="conf">—</span></div>
+<div>samples: <span id="samples">0</span></div>
+</div>
+<div id="status" class="calibrating">calibrating...</div>
+<div id="nav"><a href="./">← Core</a></div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { Oracle } from './oracle.js';
+
+const oracle = new Oracle();
+let isWatched = null;
+let morphAmount = 0;
+let targetMorph = 0;
+
+// Scene setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+camera.position.z = 4;
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// Create morphable sphere
+const geometry = new THREE.IcosahedronGeometry(1.5, 4);
+const basePositions = geometry.attributes.position.array.slice();
+
+const material = new THREE.MeshStandardMaterial({
+  color: 0x4488ff,
+  metalness: 0.3,
+  roughness: 0.4,
+  wireframe: false,
+  flatShading: true
+});
+
+const sphere = new THREE.Mesh(geometry, material);
+scene.add(sphere);
+
+// Lighting
+const light1 = new THREE.PointLight(0xffffff, 100);
+light1.position.set(5, 5, 5);
+scene.add(light1);
+
+const light2 = new THREE.PointLight(0x4488ff, 50);
+light2.position.set(-5, -5, 5);
+scene.add(light2);
+
+scene.add(new THREE.AmbientLight(0x222244));
+
+// Morph the sphere based on entropy
+function morphSphere(amount, entropy) {
+  const pos = geometry.attributes.position.array;
+  const time = performance.now() * 0.001;
+
+  for (let i = 0; i < pos.length; i += 3) {
+    const bx = basePositions[i];
+    const by = basePositions[i+1];
+    const bz = basePositions[i+2];
+
+    // Base distance from center
+    const dist = Math.sqrt(bx*bx + by*by + bz*bz);
+    const nx = bx/dist, ny = by/dist, nz = bz/dist;
+
+    // Chaotic displacement when unobserved
+    const chaos = amount * 0.5;
+    const wave = Math.sin(bx*3 + time*2) * Math.cos(by*3 + time*1.5) * Math.sin(bz*3 + time);
+    const noise = (entropy?.execVariance || 0) * 1000;
+
+    const displacement = chaos * wave * (1 + noise * 0.1);
+
+    pos[i] = bx + nx * displacement;
+    pos[i+1] = by + ny * displacement;
+    pos[i+2] = bz + nz * displacement;
+  }
+
+  geometry.attributes.position.needsUpdate = true;
+  geometry.computeVertexNormals();
+}
+
+// Oracle callbacks
+oracle.on('sample', (s) => {
+  isWatched = s.isWatched;
+
+  // Update HUD
+  document.getElementById('var').textContent = s.entropy?.execVariance?.toFixed(5) || '—';
+  document.getElementById('drift').textContent = s.entropy?.clockDrift?.toFixed(7) || '—';
+  document.getElementById('conf').textContent = (s.confidence * 100).toFixed(0) + '%';
+  document.getElementById('samples').textContent = oracle.samples.length;
+
+  // Update status
+  const statusEl = document.getElementById('status');
+  if (s.isWatched === null) {
+    statusEl.className = 'calibrating';
+    statusEl.textContent = 'calibrating...';
+  } else if (s.isWatched) {
+    statusEl.className = 'watched';
+    statusEl.textContent = '👁 observed';
+    targetMorph = 0; // Smooth when watched
+  } else {
+    statusEl.className = 'unwatched';
+    statusEl.textContent = '🌀 unobserved';
+    targetMorph = 1; // Chaotic when unwatched
+  }
+
+  // Color shift based on state
+  const hue = s.isWatched ? 0 : 0.55; // Red when watched, cyan when not
+  material.color.setHSL(hue, 0.7, 0.5);
+  light2.color.setHSL(hue, 0.8, 0.5);
+});
+
+// Start oracle with fast sampling
+setTimeout(() => {
+  oracle.calibrate(5);
+  document.getElementById('status').textContent = 'ready';
+  oracle.start(50); // 50ms = 20 samples/sec
+}, 1000);
+
+// Animation loop
+let lastEntropy = null;
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Smooth morph transition
+  morphAmount += (targetMorph - morphAmount) * 0.1;
+
+  // Get latest entropy for organic motion
+  if (oracle.samples.length > 0) {
+    lastEntropy = oracle.samples[oracle.samples.length - 1].entropy;
+  }
+
+  morphSphere(morphAmount, lastEntropy);
+
+  // Gentle rotation
+  sphere.rotation.x += 0.002;
+  sphere.rotation.y += 0.003;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// Resize handler
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

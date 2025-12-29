@@ -756,7 +756,15 @@
         renderer.setSize(innerWidth, innerHeight);
     };
 
-    // Init
+    // Init - create a test tree to verify Three.js works
+    console.log('EDEN initializing...');
+    createTree(0, 0, 10, 1, [
+        { path: 'test.js', name: 'test.js', size: 100 },
+        { path: 'demo.html', name: 'demo.html', size: 200 },
+        { path: 'style.css', name: 'style.css', size: 150 }
+    ], 'demo/test');
+    console.log('Test tree created, trees:', state.trees.length);
+
     document.getElementById('loading').classList.add('hidden');
     animate();
 

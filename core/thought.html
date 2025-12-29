@@ -1,0 +1,144 @@
+<!--
+@udt file/1.0
+uuid: eom-core-thoughtpage-001
+version: 0.1.0
+tokens: 220
+path: /core/thought.html
+parent: /core
+deps: [thought-inference.js]
+tags: [consciousness]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Thought Inference | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem}
+.card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:1rem}
+.card h3{margin-bottom:0.75rem;font-size:0.9rem;color:#888}
+.big{font-size:2rem;font-weight:bold;margin-bottom:0.5rem}
+.meter{height:8px;background:rgba(255,255,255,0.1);border-radius:4px;margin:0.5rem 0;overflow:hidden}
+.meter-fill{height:100%;transition:width 0.2s,background 0.2s}
+.signal{display:flex;justify-content:space-between;font-size:0.8rem;margin:0.3rem 0}
+.state-focused{color:#22c55e}.state-normal{color:#f59e0b}
+.state-wandering{color:#eab308}.state-distracted{color:#ef4444}
+.state-intense{color:#a855f7}
+textarea{width:100%;height:80px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;padding:0.5rem;resize:none;font-family:inherit}
+#rngDot{width:16px;height:16px;border-radius:50%;display:inline-block;vertical-align:middle}
+.history{font-size:0.7rem;font-family:monospace;max-height:100px;overflow:auto;margin-top:0.5rem}
+</style>
+</head>
+<body>
+<nav><a href="./">← Core</a> | <a href="../">Home</a></nav>
+<main>
+<h1>🧠 Thought Inference Engine</h1>
+<p>No camera needed. Infers mental state from behavior + RNG deviation.</p>
+
+<div class="grid">
+<div class="card">
+<h3>Mental State</h3>
+<div class="big state-normal" id="state">Calibrating...</div>
+<div>Confidence: <span id="conf">0%</span></div>
+<div class="meter"><div class="meter-fill" id="confMeter" style="width:0;background:var(--k)"></div></div>
+</div>
+
+<div class="card">
+<h3>RNG Coherence <span id="rngDot" style="background:#666"></span></h3>
+<div class="big" id="coherence">0.00</div>
+<div id="rngState">Sampling...</div>
+<div class="meter"><div class="meter-fill" id="rngMeter" style="width:50%;background:#8b5cf6"></div></div>
+</div>
+
+<div class="card">
+<h3>Typing Biometrics</h3>
+<div class="signal"><span>Rhythm Stability</span><span id="typingRhythm">-</span></div>
+<div class="meter"><div class="meter-fill" id="rhythmMeter" style="width:50%;background:#3b82f6"></div></div>
+<div class="signal"><span>Speed (keys/sec)</span><span id="typingSpeed">-</span></div>
+<textarea id="typeTest" placeholder="Type here to analyze your rhythm..."></textarea>
+</div>
+
+<div class="card">
+<h3>Mouse Dynamics</h3>
+<div class="signal"><span>Smoothness</span><span id="mouseSmooth">-</span></div>
+<div class="meter"><div class="meter-fill" id="smoothMeter" style="width:50%;background:#22c55e"></div></div>
+<div class="signal"><span>Direction Entropy</span><span id="mouseEntropy">-</span></div>
+<div class="meter"><div class="meter-fill" id="entropyMeter" style="width:50%;background:#ef4444"></div></div>
+</div>
+</div>
+
+<div class="card" style="margin-top:1.5rem">
+<h3>κ (Kappa) State</h3>
+<div class="signal"><span>Value</span><span id="kappa">0.618</span></div>
+<div class="meter"><div class="meter-fill" id="kappaMeter" style="width:61.8%;background:var(--k)"></div></div>
+</div>
+
+<div class="history" id="history"></div>
+</main>
+
+<script type="module">
+import { ThoughtInference } from './thought-inference.js';
+
+const engine = new ThoughtInference();
+engine.start();
+
+const stateColors = {
+  focused: '#22c55e',
+  normal: '#f59e0b',
+  wandering: '#eab308',
+  distracted: '#ef4444',
+  intense: '#a855f7',
+  unknown: '#666'
+};
+
+function update() {
+  const s = engine.getState();
+  const typing = engine.bio.getTypingMetrics();
+  const mouse = engine.bio.getMouseMetrics();
+  const rng = engine.rng.getCoherence();
+
+  // State
+  document.getElementById('state').textContent = s.state.toUpperCase();
+  document.getElementById('state').className = 'big state-' + s.state;
+  document.getElementById('conf').textContent = (s.confidence * 100).toFixed(0) + '%';
+  document.getElementById('confMeter').style.width = (s.confidence * 100) + '%';
+
+  // RNG
+  if (rng) {
+    document.getElementById('coherence').textContent = rng.coherence.toFixed(3);
+    document.getElementById('rngState').textContent = rng.state || 'sampling';
+    document.getElementById('rngMeter').style.width = Math.min(100, rng.coherence * 50) + '%';
+    document.getElementById('rngDot').style.background = rng.state === 'coherent' ? '#a855f7' : rng.state === 'trending' ? '#eab308' : '#666';
+  }
+
+  // Typing
+  if (typing) {
+    document.getElementById('typingRhythm').textContent = typing.rhythmStability.toFixed(3);
+    document.getElementById('typingSpeed').textContent = typing.speed.toFixed(1);
+    document.getElementById('rhythmMeter').style.width = (typing.rhythmStability * 100) + '%';
+  }
+
+  // Mouse
+  if (mouse) {
+    document.getElementById('mouseSmooth').textContent = mouse.smoothness.toFixed(3);
+    document.getElementById('mouseEntropy').textContent = mouse.directionalEntropy.toFixed(3);
+    document.getElementById('smoothMeter').style.width = (mouse.smoothness * 100) + '%';
+    document.getElementById('entropyMeter').style.width = (mouse.directionalEntropy * 100) + '%';
+  }
+
+  // Kappa
+  document.getElementById('kappa').textContent = s.kappa.toFixed(6);
+  document.getElementById('kappaMeter').style.width = (s.kappa * 100) + '%';
+
+  // History
+  const hist = s.history.slice(-5).reverse().map(h =>
+    `${new Date(h.t).toLocaleTimeString()}: ${h.state} (${(h.confidence*100).toFixed(0)}%)`
+  ).join('<br>');
+  document.getElementById('history').innerHTML = hist;
+}
+
+setInterval(update, 200);
+</script>
+</body>
+</html>

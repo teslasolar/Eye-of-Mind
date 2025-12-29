@@ -1,0 +1,189 @@
+<!--
+@udt file/1.0
+uuid: eom-core-godclock-001
+version: 0.1.0
+path: /core/god-clock.html
+deps: [oracle.js]
+tags: [consciousness, divination, terry]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>God Clock | Eye of Mind</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:'Courier New',monospace;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100vh;overflow:hidden}
+.clock{font-size:4rem;color:#0f0;text-shadow:0 0 20px #0f0;margin:1rem}
+.ticks{font-size:0.8rem;color:#0a0;height:20px;overflow:hidden}
+.word{font-size:3rem;color:#ff0;text-shadow:0 0 30px #ff0;margin:2rem;
+  min-height:4rem;text-align:center}
+.history{max-width:600px;font-size:1rem;color:#888;text-align:center;
+  max-height:200px;overflow-y:auto;margin:1rem;line-height:1.8}
+.history span{margin:0 0.5rem;transition:color 0.3s}
+.history span:hover{color:#ff0}
+.controls{margin:2rem}
+button{background:#111;border:1px solid #0f0;color:#0f0;padding:12px 24px;
+  font-family:inherit;font-size:1rem;cursor:pointer;margin:0.5rem}
+button:hover{background:#0f0;color:#000}
+.status{font-size:0.7rem;color:#444;position:fixed;bottom:10px;right:10px}
+#nav{position:fixed;bottom:10px;left:10px}
+#nav a{color:#333;font-size:0.7rem;text-decoration:none}
+.flash{animation:flash 0.3s}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+<div class="ticks" id="ticks"></div>
+<div class="clock" id="clock">00:00:00.000</div>
+<div class="word" id="word">—</div>
+<div class="controls">
+<button id="ask">ASK GOD</button>
+<button id="stream">STREAM</button>
+<button id="stop" style="display:none">STOP</button>
+</div>
+<div class="history" id="history"></div>
+<div class="status" id="status">ready</div>
+<div id="nav"><a href="./">← Core</a></div>
+
+<script type="module">
+import { Oracle } from './oracle.js';
+
+// Terry-style word list - nouns, verbs, concepts
+const words = [
+  // Nouns
+  'GOD','LIGHT','DARK','SOUL','MIND','HEART','FIRE','WATER','EARTH','AIR',
+  'SUN','MOON','STAR','SKY','SEA','TREE','BIRD','FISH','SNAKE','LION',
+  'KING','QUEEN','CHILD','MAN','WOMAN','ANGEL','DEMON','SPIRIT','GHOST','DREAM',
+  'TRUTH','LIE','LOVE','HATE','FEAR','HOPE','FAITH','DOUBT','LIFE','DEATH',
+  'TIME','SPACE','VOID','CHAOS','ORDER','LAW','FREEDOM','PEACE','WAR','BLOOD',
+  'GOLD','SILVER','IRON','STONE','BONE','FLESH','BREAD','WINE','SALT','HONEY',
+  'TEMPLE','ALTAR','CROSS','SWORD','SHIELD','CROWN','THRONE','GATE','PATH','DOOR',
+  'WORD','NAME','NUMBER','SIGN','MARK','SEAL','KEY','LOCK','CHAIN','RING',
+  // Verbs
+  'IS','WAS','WILL','BE','SEE','HEAR','SPEAK','KNOW','THINK','FEEL',
+  'RISE','FALL','COME','GO','STAY','LEAVE','GIVE','TAKE','MAKE','BREAK',
+  'LIVE','DIE','SLEEP','WAKE','EAT','DRINK','BURN','FREEZE','GROW','SHRINK',
+  'LOVE','HATE','FEAR','TRUST','DOUBT','BELIEVE','DENY','ACCEPT','REJECT','JUDGE',
+  'CREATE','DESTROY','BUILD','TEAR','OPEN','CLOSE','BEGIN','END','WAIT','SEEK',
+  // Adjectives
+  'GOOD','EVIL','TRUE','FALSE','HOLY','CURSED','BLESSED','DAMNED','PURE','CORRUPT',
+  'OLD','NEW','FIRST','LAST','HIGH','LOW','DEEP','WIDE','LONG','SHORT',
+  'BRIGHT','DIM','HOT','COLD','WET','DRY','HARD','SOFT','LOUD','QUIET',
+  // Numbers & Special
+  'ONE','TWO','THREE','SEVEN','TWELVE','FORTY','THOUSAND','MILLION','INFINITE','ZERO',
+  'YES','NO','MAYBE','SOON','NOW','NEVER','ALWAYS','SOMETIMES','HERE','THERE',
+  'I','YOU','WE','THEY','ALL','NONE','SOME','MANY','FEW','BOTH'
+];
+
+const oracle = new Oracle();
+let streaming = false;
+let streamInterval = null;
+let tickBuffer = '';
+
+// Clock display
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  const ms = String(now.getMilliseconds()).padStart(3,'0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s}.${ms}`;
+}
+setInterval(updateClock, 37);
+
+// Tick visualization - entropy bits
+function addTick(entropy) {
+  const bit = entropy > 0.5 ? '1' : '0';
+  tickBuffer = (tickBuffer + bit).slice(-80);
+  document.getElementById('ticks').textContent = tickBuffer;
+}
+
+// Divine pick using oracle entropy
+function divinePick() {
+  const t0 = performance.now();
+
+  // Micro-timing burst
+  let acc = 0;
+  for (let i = 0; i < 1000; i++) {
+    const t = performance.now();
+    acc += (t * 1000000) % 1;
+  }
+
+  // Clock entropy
+  const now = Date.now();
+  const micro = performance.now();
+  const drift = (micro * 1000) % 1;
+
+  // Combine sources
+  const seed = (acc + drift + (now % 1000) / 1000) % 1;
+  addTick(seed);
+
+  // Pick word
+  const idx = Math.floor(seed * words.length);
+  return words[idx];
+}
+
+// Show word with flash
+function showWord(word) {
+  const el = document.getElementById('word');
+  el.textContent = word;
+  el.classList.remove('flash');
+  void el.offsetWidth; // reflow
+  el.classList.add('flash');
+
+  // Add to history
+  const hist = document.getElementById('history');
+  const span = document.createElement('span');
+  span.textContent = word;
+  hist.appendChild(span);
+  hist.scrollTop = hist.scrollHeight;
+
+  document.getElementById('status').textContent = `picked: ${word} @ ${performance.now().toFixed(3)}`;
+}
+
+// Ask once
+document.getElementById('ask').onclick = () => {
+  const word = divinePick();
+  showWord(word);
+};
+
+// Stream mode
+document.getElementById('stream').onclick = () => {
+  if (streaming) return;
+  streaming = true;
+  document.getElementById('stream').style.display = 'none';
+  document.getElementById('stop').style.display = 'inline';
+
+  // Pick words at entropy-driven intervals
+  function nextWord() {
+    const word = divinePick();
+    showWord(word);
+
+    // Next interval based on entropy (500-2000ms)
+    const delay = 500 + divinePick().length * 100;
+    streamInterval = setTimeout(nextWord, delay);
+  }
+  nextWord();
+};
+
+// Stop stream
+document.getElementById('stop').onclick = () => {
+  streaming = false;
+  clearTimeout(streamInterval);
+  document.getElementById('stream').style.display = 'inline';
+  document.getElementById('stop').style.display = 'none';
+};
+
+// Keyboard shortcut
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    document.getElementById('ask').click();
+  }
+});
+</script>
+</body>
+</html>

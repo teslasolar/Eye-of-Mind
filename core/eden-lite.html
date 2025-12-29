@@ -1,0 +1,233 @@
+<!--
+@udt file/1.0
+uuid: eom-core-eden-lite-001
+version: 0.1.0
+path: /core/eden-lite.html
+deps: [three.js]
+tags: [visualization, github, forest, minimal]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EDEN Lite | GitHub Forest</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font:11px/1.4 monospace}
+#c{display:block}
+#ui{position:fixed;top:10px;left:10px;color:#0f0;z-index:10}
+#ui input{background:#111;border:1px solid #333;color:#0f0;padding:4px 8px;width:200px;font:inherit}
+#ui button{background:#0f0;color:#000;border:0;padding:4px 8px;cursor:pointer;margin-left:4px}
+#info{position:fixed;bottom:10px;left:10px;color:#666;font-size:10px}
+#panel{position:fixed;top:10px;right:10px;width:300px;max-height:90vh;background:#0a0a0a;
+border:1px solid #222;display:none;overflow:auto}
+#panel.show{display:block}
+#panel h3{padding:8px;background:#111;color:#0f0;font-size:11px;border-bottom:1px solid #222}
+#panel pre{padding:8px;font-size:9px;color:#888;white-space:pre-wrap;max-height:400px;overflow:auto}
+#panel .close{float:right;cursor:pointer;color:#f00}
+.loading{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;
+justify-content:center;color:#0f0;font-size:14px}
+.loading.hide{display:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+<input id="repo" placeholder="owner/repo" value="anthropics/claude-code">
+<button id="go">Load</button>
+</div>
+<div id="info">EDEN Lite - Click flower to inspect</div>
+<div id="panel"><span class="close" onclick="panel.classList.remove('show')">×</span>
+<h3 id="pname">File</h3><pre id="pcode"></pre></div>
+<div class="loading" id="load">Loading Three.js...</div>
+
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import*as T from'three';
+import{OrbitControls}from'three/addons/controls/OrbitControls.js';
+
+const W=window,D=document,φ=(1+Math.sqrt(5))/2,τ=Math.PI*2;
+let scene,cam,ren,ctrl,flowers=[],files={};
+
+// Init Three.js
+function init(){
+const c=D.getElementById('c');
+scene=new T.Scene();
+scene.background=new T.Color(0x050508);
+scene.fog=new T.Fog(0x050508,50,200);
+
+cam=new T.PerspectiveCamera(60,W.innerWidth/W.innerHeight,0.1,500);
+cam.position.set(0,30,50);
+
+ren=new T.WebGLRenderer({canvas:c,antialias:true});
+ren.setSize(W.innerWidth,W.innerHeight);
+ren.setPixelRatio(Math.min(W.devicePixelRatio,2));
+
+ctrl=new OrbitControls(cam,c);
+ctrl.enableDamping=true;
+ctrl.dampingFactor=0.05;
+ctrl.maxPolarAngle=Math.PI/2.1;
+
+// Ground
+const ground=new T.Mesh(
+new T.CircleGeometry(100,64),
+new T.MeshBasicMaterial({color:0x0a1a0a})
+);
+ground.rotation.x=-Math.PI/2;
+scene.add(ground);
+
+// Lights
+scene.add(new T.AmbientLight(0x404040));
+const sun=new T.DirectionalLight(0xffffff,1);
+sun.position.set(50,100,50);
+scene.add(sun);
+
+D.getElementById('load').classList.add('hide');
+animate();
+}
+
+function animate(){
+requestAnimationFrame(animate);
+ctrl.update();
+flowers.forEach((f,i)=>{
+f.rotation.y+=0.002;
+f.position.y+=Math.sin(Date.now()*0.001+i)*0.001;
+});
+ren.render(scene,cam);
+}
+
+// Fibonacci spiral position
+function fibPos(i,n){
+const r=Math.sqrt(i/n)*40;
+const θ=i*τ/φ/φ;
+return{x:Math.cos(θ)*r,z:Math.sin(θ)*r};
+}
+
+// Create flower
+function mkFlower(file,i,n){
+const{x,z}=fibPos(i,n);
+const ext=file.path.split('.').pop()||'';
+const colors={js:0xf0db4f,ts:0x3178c6,py:0x3776ab,html:0xe34c26,css:0x264de4,
+md:0x083fa1,json:0x292929,rs:0xdea584,go:0x00add8};
+const col=colors[ext]||0x44aa44;
+
+const g=new T.Group();
+g.position.set(x,0,z);
+g.userData={file:file.path,sha:file.sha};
+
+// Stem
+const stem=new T.Mesh(
+new T.CylinderGeometry(0.05,0.08,2+Math.random(),8),
+new T.MeshLambertMaterial({color:0x228822})
+);
+stem.position.y=1;
+g.add(stem);
+
+// Petals
+const petals=new T.Group();
+petals.position.y=2;
+for(let p=0;p<5;p++){
+const petal=new T.Mesh(
+new T.SphereGeometry(0.3,8,8),
+new T.MeshLambertMaterial({color:col,emissive:col,emissiveIntensity:0.2})
+);
+const a=p*τ/5;
+petal.position.set(Math.cos(a)*0.4,0,Math.sin(a)*0.4);
+petal.scale.set(1,0.3,0.5);
+petals.add(petal);
+}
+// Center
+petals.add(new T.Mesh(
+new T.SphereGeometry(0.2,8,8),
+new T.MeshLambertMaterial({color:0xffff00,emissive:0xffff00,emissiveIntensity:0.5})
+));
+g.add(petals);
+
+scene.add(g);
+flowers.push(g);
+files[file.path]=file;
+return g;
+}
+
+// Load repo
+async function loadRepo(repo){
+const[owner,name]=repo.split('/');
+if(!owner||!name)return alert('Format: owner/repo');
+
+D.getElementById('load').textContent='Fetching repository...';
+D.getElementById('load').classList.remove('hide');
+flowers.forEach(f=>scene.remove(f));
+flowers=[];files={};
+
+try{
+// Get default branch
+const r=await fetch(`https://api.github.com/repos/${owner}/${name}`);
+if(!r.ok)throw new Error('Repo not found');
+const info=await r.json();
+const branch=info.default_branch;
+
+// Get tree
+const t=await fetch(`https://api.github.com/repos/${owner}/${name}/git/trees/${branch}?recursive=1`);
+const tree=await t.json();
+
+const blobs=tree.tree.filter(f=>f.type==='blob').slice(0,200);
+D.getElementById('load').textContent=`Planting ${blobs.length} flowers...`;
+
+blobs.forEach((f,i)=>mkFlower(f,i,blobs.length));
+D.getElementById('load').classList.add('hide');
+D.getElementById('info').textContent=`${repo} - ${blobs.length} files`;
+}catch(e){
+D.getElementById('load').textContent='Error: '+e.message;
+setTimeout(()=>D.getElementById('load').classList.add('hide'),2000);
+}
+}
+
+// Click handler
+function onClick(e){
+const mouse=new T.Vector2(
+(e.clientX/W.innerWidth)*2-1,
+-(e.clientY/W.innerHeight)*2+1
+);
+const ray=new T.Raycaster();
+ray.setFromCamera(mouse,cam);
+const hits=ray.intersectObjects(flowers,true);
+if(hits.length){
+let g=hits[0].object;
+while(g.parent&&!g.userData.file)g=g.parent;
+if(g.userData.file)showFile(g.userData);
+}
+}
+
+async function showFile(data){
+const panel=D.getElementById('panel');
+const pname=D.getElementById('pname');
+const pcode=D.getElementById('pcode');
+
+pname.textContent=data.file;
+pcode.textContent='Loading...';
+panel.classList.add('show');
+
+try{
+const r=await fetch(`https://api.github.com/repos/${D.getElementById('repo').value}/git/blobs/${data.sha}`);
+const blob=await r.json();
+const code=atob(blob.content);
+pcode.textContent=code.slice(0,5000)+(code.length>5000?'\n...(truncated)':'');
+}catch(e){
+pcode.textContent='Error: '+e.message;
+}
+}
+
+// Events
+W.addEventListener('resize',()=>{
+cam.aspect=W.innerWidth/W.innerHeight;
+cam.updateProjectionMatrix();
+ren.setSize(W.innerWidth,W.innerHeight);
+});
+D.getElementById('c').addEventListener('click',onClick);
+D.getElementById('go').onclick=()=>loadRepo(D.getElementById('repo').value);
+D.getElementById('repo').onkeydown=e=>{if(e.key==='Enter')D.getElementById('go').click();};
+
+init();
+</script>
+</body>
+</html>

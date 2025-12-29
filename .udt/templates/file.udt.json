@@ -1,0 +1,17 @@
+{
+  "$schema": "eom://udt/file/1.0",
+  "template": "file",
+  "fields": {
+    "uuid": { "type": "uuid", "auto": true },
+    "version": { "type": "semver", "default": "0.1.0" },
+    "tokens": { "type": "int", "computed": true },
+    "path": { "type": "path", "auto": true },
+    "parent": { "type": "ref", "nullable": true },
+    "deps": { "type": "array<ref>", "default": [] },
+    "tags": { "type": "array<tag>", "default": [] },
+    "created": { "type": "timestamp", "auto": true },
+    "modified": { "type": "timestamp", "auto": true }
+  },
+  "maxTokens": 250,
+  "headerFormat": "html-comment"
+}

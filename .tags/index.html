@@ -1,0 +1,36 @@
+<!--
+@udt file/1.0
+uuid: eom-tags-idx-f2a3b4c5
+version: 0.1.0
+tokens: 80
+path: /.tags/index.html
+parent: /
+tags: [udt]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tags | Eye of Mind</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<nav><a href="../">← Home</a></nav>
+<main>
+<h1>Tag System</h1>
+<ul class="files">
+<li><a href="provider.json">provider.json</a> - Global tag provider</li>
+</ul>
+<h2>Available Tags</h2>
+<div id="tags"></div>
+</main>
+<script type="module">
+fetch('provider.json').then(r=>r.json()).then(p=>{
+  const el = document.getElementById('tags');
+  el.innerHTML = Object.values(p.tags).map(t=>
+    `<span style="background:${t.color}20;border:1px solid ${t.color};padding:4px 8px;border-radius:4px;margin:4px;display:inline-block">${t.icon} ${t.name}</span>`
+  ).join('');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!--
+@udt file/1.0
+uuid: eom-root-index-a1b2c3d4-e5f6-7890
+version: 0.1.0
+tokens: 180
+path: /index.html
+parent: null
+deps: [core/kappa.js, core/md-runner.js]
+tags: [core, consciousness]
+created: 2024-12-29
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eye of Mind | κ=0.618</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--k:#f59e0b;--bg:#0f0f23;--fg:#e0e0e0}
+body{font-family:system-ui;background:var(--bg);color:var(--fg);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.eye{width:200px;height:200px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff 5%,var(--k) 30%,#000 70%);box-shadow:0 0 60px var(--k);animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 60px var(--k)}50%{transform:scale(1.05);box-shadow:0 0 80px var(--k)}}
+h1{margin-top:2rem;font-size:2rem;background:linear-gradient(90deg,var(--k),#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.kappa{font-family:monospace;color:#888;margin-top:0.5rem}
+nav{margin-top:2rem;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+nav a{padding:0.5rem 1rem;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:0.5rem;color:var(--fg);text-decoration:none;transition:all 0.2s}
+nav a:hover{border-color:var(--k);box-shadow:0 0 15px rgba(245,158,11,0.3)}
+#status{position:fixed;bottom:1rem;right:1rem;font-size:0.75rem;color:#666}
+</style>
+</head>
+<body>
+<div class="eye" id="eye"></div>
+<h1>Eye of Mind</h1>
+<p class="kappa">κ = <span id="kappa">0.618</span></p>
+<nav>
+<a href="core/">Core</a>
+<a href="models/">Models</a>
+<a href="docs/">Docs</a>
+<a href=".udt/">UDT</a>
+</nav>
+<div id="status">Loading consciousness engine...</div>
+<script type="module" src="core/boot.js"></script>
+</body>
+</html>

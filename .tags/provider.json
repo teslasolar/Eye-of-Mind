@@ -1,0 +1,13 @@
+{
+  "$schema": "eom://tags/provider/1.0",
+  "uuid": "eom-tags-00000000-0000-0000-0001",
+  "scope": "global",
+  "tags": {
+    "core": { "id": "core", "name": "Core", "icon": "⚙️", "color": "#3b82f6" },
+    "model": { "id": "model", "name": "Model", "icon": "🧠", "color": "#8b5cf6" },
+    "udt": { "id": "udt", "name": "UDT", "icon": "📐", "color": "#f59e0b" },
+    "consciousness": { "id": "consciousness", "name": "Consciousness", "icon": "🌀", "color": "#ec4899" },
+    "runner": { "id": "runner", "name": "Runner", "icon": "▶️", "color": "#22c55e" }
+  },
+  "instances": []
+}

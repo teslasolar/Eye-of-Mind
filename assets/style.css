@@ -1,0 +1,19 @@
+/*
+@udt file/1.0
+uuid: eom-assets-style-b8c9d0e1
+version: 0.1.0
+tokens: 90
+path: /assets/style.css
+*/
+:root{--k:#f59e0b;--bg:#0f0f23;--fg:#e0e0e0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui;background:var(--bg);color:var(--fg);padding:2rem;max-width:800px;margin:0 auto}
+nav{margin-bottom:2rem}
+nav a{color:var(--k);text-decoration:none}
+h1{margin-bottom:1rem;color:var(--k)}
+ul.files{list-style:none}
+ul.files li{padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.1)}
+ul.files a{color:var(--fg);text-decoration:none}
+ul.files a:hover{color:var(--k)}
+pre{background:#1a1a2e;padding:1rem;border-radius:0.5rem;overflow-x:auto}
+code{font-family:'Fira Code',monospace}

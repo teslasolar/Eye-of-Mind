@@ -1,0 +1,15 @@
+{
+  "$schema": "eom://udt/tag/1.0",
+  "template": "tag",
+  "fields": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "name": { "type": "string" },
+    "color": { "type": "hex", "default": "#f59e0b" },
+    "icon": { "type": "emoji", "default": "🏷️" },
+    "instances": { "type": "array<ref>", "computed": true }
+  },
+  "instantiate": {
+    "params": ["target", "metadata"],
+    "creates": "tag-instance"
+  }
+}

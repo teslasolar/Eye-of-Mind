@@ -1,0 +1,12 @@
+{
+  "$schema": "eom://udt/instance/1.0",
+  "template": "instance",
+  "fields": {
+    "uuid": { "type": "uuid", "auto": true },
+    "source": { "type": "ref", "required": true },
+    "target": { "type": "ref", "required": true },
+    "params": { "type": "object", "default": {} },
+    "created": { "type": "timestamp", "auto": true }
+  },
+  "description": "Instantiated UDT or tag on a target"
+}

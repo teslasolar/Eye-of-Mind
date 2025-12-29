@@ -1,0 +1,17 @@
+{
+  "project": "Eye-of-Mind",
+  "version": "0.1.0",
+  "uuid": "eom-00000000-0000-0000-0000-000000000001",
+  "description": "Individual consciousness interface via screen-thought interaction",
+  "kappa": 0.618,
+  "created": "2024-12-29",
+  "templates": ["file", "directory", "tag", "instance"],
+  "paths": {
+    "root": "/",
+    "udt": "/.udt",
+    "tags": "/.tags",
+    "core": "/core",
+    "models": "/models",
+    "docs": "/docs"
+  }
+}

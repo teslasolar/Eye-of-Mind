@@ -1,0 +1,15 @@
+{
+  "$schema": "eom://udt/directory/1.0",
+  "template": "directory",
+  "fields": {
+    "uuid": { "type": "uuid", "auto": true },
+    "name": { "type": "string" },
+    "path": { "type": "path", "auto": true },
+    "parent": { "type": "ref", "nullable": true },
+    "children": { "type": "array<ref>", "computed": true },
+    "index": { "type": "ref", "auto": true },
+    "templates": { "type": "array<udt>", "default": [] },
+    "tagProvider": { "type": "ref", "nullable": true }
+  },
+  "requires": ["index.html"]
+}

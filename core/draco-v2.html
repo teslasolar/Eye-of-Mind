@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRACO v2 | High-Res AI Dragon</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #e0e0e0; }
+        #canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+
+        .panel {
+            position: absolute;
+            background: rgba(5,5,15,0.95);
+            border: 1px solid rgba(0,180,255,0.15);
+            border-radius: 10px;
+            padding: 14px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 4px 30px rgba(0,100,200,0.1);
+        }
+
+        #status { top: 12px; left: 12px; font-size: 11px; min-width: 140px; }
+        #status h3 { color: #0cf; margin-bottom: 10px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+        #status h3::before { content: ''; width: 8px; height: 8px; background: #0f0; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        #status .row { display: flex; justify-content: space-between; margin: 6px 0; }
+        #status .val { color: #0f0; font-family: 'Consolas', monospace; }
+        .bar { height: 4px; background: #111; border-radius: 2px; margin-top: 2px; overflow: hidden; }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, #08f, #0f8); transition: width 0.3s; }
+
+        #chat { bottom: 12px; left: 12px; width: 340px; max-height: 420px; display: flex; flex-direction: column; }
+        #chat h3 { color: #0cf; margin-bottom: 10px; font-size: 14px; }
+        #messages { flex: 1; overflow-y: auto; max-height: 220px; margin-bottom: 10px; font-size: 12px; }
+        #messages::-webkit-scrollbar { width: 4px; }
+        #messages::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        .msg { padding: 8px 10px; margin: 6px 0; border-radius: 8px; line-height: 1.5; }
+        .msg.user { background: linear-gradient(135deg, rgba(0,100,200,0.2), rgba(0,150,255,0.1)); margin-left: 24px; border-left: 2px solid #08f; }
+        .msg.ai { background: linear-gradient(135deg, rgba(0,200,100,0.15), rgba(0,255,150,0.05)); margin-right: 24px; border-left: 2px solid #0a6; }
+        .msg.system { background: rgba(255,180,0,0.08); font-size: 10px; color: #a96; border-left: 2px solid #a60; }
+        #input-row { display: flex; gap: 8px; }
+        #input-row input { flex: 1; padding: 10px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(0,200,255,0.15); border-radius: 6px; color: #fff; font-size: 13px; }
+        #input-row input:focus { outline: none; border-color: #0af; }
+        #input-row button { padding: 10px 20px; background: linear-gradient(135deg, #08f, #06a); border: none; border-radius: 6px; color: #fff; cursor: pointer; font-weight: 600; transition: transform 0.1s; }
+        #input-row button:hover { transform: scale(1.05); }
+
+        #controls { top: 12px; right: 12px; width: 220px; }
+        #controls h3 { color: #0cf; margin-bottom: 10px; font-size: 14px; }
+        #controls label { display: block; margin: 10px 0 5px; font-size: 11px; color: #888; }
+        #controls input[type=range] { width: 100%; accent-color: #0af; }
+        #controls select, #controls input[type=text] { width: 100%; padding: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(0,200,255,0.15); border-radius: 5px; color: #fff; font-size: 11px; }
+
+        #servo { bottom: 12px; right: 12px; width: 220px; }
+        #servo h3 { color: #f90; margin-bottom: 10px; font-size: 14px; }
+        .servo-row { display: flex; align-items: center; margin: 6px 0; font-size: 11px; }
+        .servo-row span:first-child { width: 50px; }
+        .servo-bar { flex: 1; height: 8px; background: #111; margin: 0 8px; border-radius: 4px; overflow: hidden; }
+        .servo-fill { height: 100%; background: linear-gradient(90deg, #f60, #fc0); transition: width 0.1s; }
+        .servo-val { font-family: monospace; color: #fc0; width: 45px; text-align: right; }
+        #connect-btn { width: 100%; margin-top: 12px; padding: 10px; background: linear-gradient(135deg, #333, #222); border: 1px solid #444; border-radius: 6px; color: #fff; cursor: pointer; transition: all 0.2s; }
+        #connect-btn:hover { border-color: #0a0; }
+        #connect-btn.connected { background: linear-gradient(135deg, #040, #020); border-color: #0a0; }
+
+        #loading { position: fixed; inset: 0; background: radial-gradient(ellipse at center, #0a0a15 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        #loading.hidden { opacity: 0; pointer-events: none; transition: opacity 0.5s; }
+        #loading h1 { font-size: 4rem; color: #0cf; letter-spacing: 0.4em; margin-bottom: 1rem; text-shadow: 0 0 40px rgba(0,200,255,0.5); }
+        #loading p { color: #666; font-size: 13px; }
+        .progress { width: 250px; height: 6px; background: #111; border-radius: 3px; overflow: hidden; margin-top: 1.5rem; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #08f, #0cf, #0f8); width: 0%; transition: width 0.3s; }
+
+        #fx { position: fixed; top: 60px; right: 12px; }
+        #fx h3 { color: #0cf; margin-bottom: 10px; font-size: 14px; }
+        #fx label { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 11px; cursor: pointer; }
+        #fx input[type=checkbox] { accent-color: #0af; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h1>DRACO</h1>
+        <p id="load-status">Awakening the dragon...</p>
+        <div class="progress"><div class="progress-bar" id="prog"></div></div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="status" class="panel">
+        <h3>Agent State</h3>
+        <div class="row"><span>Thinking</span><span class="val" id="st-think">0%</span></div>
+        <div class="bar"><div class="bar-fill" id="bar-think" style="width:0%"></div></div>
+        <div class="row"><span>Attention</span><span class="val" id="st-attn">0%</span></div>
+        <div class="bar"><div class="bar-fill" id="bar-attn" style="width:0%"></div></div>
+        <div class="row"><span>Confidence</span><span class="val" id="st-conf">50%</span></div>
+        <div class="bar"><div class="bar-fill" id="bar-conf" style="width:50%"></div></div>
+        <div class="row"><span>Action</span><span class="val" id="st-action">idle</span></div>
+        <div class="row"><span>Tokens/s</span><span class="val" id="st-tps">0</span></div>
+    </div>
+
+    <div id="chat" class="panel">
+        <h3>💬 Chat with Draco</h3>
+        <div id="messages"></div>
+        <div id="input-row">
+            <input type="text" id="chat-input" placeholder="Ask the dragon...">
+            <button id="chat-send">Send</button>
+        </div>
+    </div>
+
+    <div id="controls" class="panel">
+        <h3>⚙️ Controls</h3>
+        <label>Model</label>
+        <select id="model-select">
+            <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen 0.5B (fast)</option>
+            <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 1.5B</option>
+            <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 1B</option>
+            <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM 1.7B</option>
+        </select>
+        <label>Animation Speed</label>
+        <input type="range" id="anim-speed" min="0.1" max="3" step="0.1" value="1">
+        <label>Dragon Hue</label>
+        <input type="range" id="dragon-hue" min="0" max="360" step="1" value="195">
+        <label>Scale Detail</label>
+        <input type="range" id="scale-detail" min="0" max="1" step="0.1" value="0.5">
+        <label>Mood</label>
+        <select id="mood-select">
+            <option value="neutral">Neutral</option>
+            <option value="curious">Curious</option>
+            <option value="thinking">Deep Thought</option>
+            <option value="excited">Excited</option>
+            <option value="alert">Alert</option>
+            <option value="sleepy">Sleepy</option>
+        </select>
+    </div>
+
+    <div id="fx" class="panel">
+        <h3>✨ Effects</h3>
+        <label><input type="checkbox" id="fx-bloom" checked> Bloom</label>
+        <label><input type="checkbox" id="fx-particles" checked> Particles</label>
+        <label><input type="checkbox" id="fx-env" checked> Environment</label>
+        <label><input type="checkbox" id="fx-breath"> Fire Breath</label>
+    </div>
+
+    <div id="servo" class="panel">
+        <h3>🔌 ESP32 Servos</h3>
+        <div class="servo-row"><span>Head</span><div class="servo-bar"><div class="servo-fill" id="sv-head" style="width:50%"></div></div><span class="servo-val" id="sv-head-v">90°</span></div>
+        <div class="servo-row"><span>Neck</span><div class="servo-bar"><div class="servo-fill" id="sv-neck" style="width:50%"></div></div><span class="servo-val" id="sv-neck-v">90°</span></div>
+        <div class="servo-row"><span>Tail 1</span><div class="servo-bar"><div class="servo-fill" id="sv-tail1" style="width:50%"></div></div><span class="servo-val" id="sv-tail1-v">90°</span></div>
+        <div class="servo-row"><span>Tail 2</span><div class="servo-bar"><div class="servo-fill" id="sv-tail2" style="width:50%"></div></div><span class="servo-val" id="sv-tail2-v">90°</span></div>
+        <div class="servo-row"><span>Wing L</span><div class="servo-bar"><div class="servo-fill" id="sv-wingL" style="width:50%"></div></div><span class="servo-val" id="sv-wingL-v">90°</span></div>
+        <div class="servo-row"><span>Wing R</span><div class="servo-bar"><div class="servo-fill" id="sv-wingR" style="width:50%"></div></div><span class="servo-val" id="sv-wingR-v">90°</span></div>
+        <input type="text" id="ignition-url" placeholder="ws://esp32.local:81" style="margin-top:10px">
+        <button id="connect-btn">Connect ESP32</button>
+    </div>
+
+    <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+    <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+
+    // ═══════════════════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════════════════
+
+    const state = {
+        thinking: 0,
+        attention: 0,
+        confidence: 0.5,
+        action: 'idle',
+        tps: 0,
+        mood: 'neutral',
+        servoAngles: { head: 90, neck: 90, tail1: 90, tail2: 90, wingL: 90, wingR: 90 }
+    };
+
+    let engine = null, ws = null, dragon = null, particles = null, fireParticles = null;
+    let animSpeed = 1, dragonHue = 195, scaleDetail = 0.5;
+    let fxBloom = true, fxParticles = true, fxEnv = true, fxBreath = false;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // THREE.JS SETUP
+    // ═══════════════════════════════════════════════════════════════════
+
+    const canvas = document.getElementById('canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Post-processing
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.4, 0.85);
+    composer.addPass(bloomPass);
+
+    // Controls
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 3;
+    controls.maxDistance = 20;
+    controls.maxPolarAngle = Math.PI / 1.8;
+    camera.position.set(0, 2, 8);
+    controls.target.set(0, 0.5, 0);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ENVIRONMENT
+    // ═══════════════════════════════════════════════════════════════════
+
+    function createEnvironment() {
+        // Gradient background
+        const bgGeo = new THREE.SphereGeometry(100, 32, 32);
+        const bgMat = new THREE.ShaderMaterial({
+            side: THREE.BackSide,
+            uniforms: {
+                color1: { value: new THREE.Color(0x000510) },
+                color2: { value: new THREE.Color(0x0a1525) }
+            },
+            vertexShader: `varying vec3 vPos; void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `uniform vec3 color1; uniform vec3 color2; varying vec3 vPos; void main() { float t = (vPos.y + 100.0) / 200.0; gl_FragColor = vec4(mix(color1, color2, t), 1.0); }`
+        });
+        scene.add(new THREE.Mesh(bgGeo, bgMat));
+
+        // Ground with grid
+        const groundGeo = new THREE.PlaneGeometry(50, 50, 50, 50);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0x0a0a15,
+            roughness: 0.9,
+            metalness: 0.1,
+            wireframe: false
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid
+        const grid = new THREE.GridHelper(50, 50, 0x0a2040, 0x050a15);
+        grid.position.y = -0.49;
+        scene.add(grid);
+
+        // Lights
+        const ambient = new THREE.AmbientLight(0x203040, 0.4);
+        scene.add(ambient);
+
+        const key = new THREE.DirectionalLight(0xffffff, 1.5);
+        key.position.set(5, 10, 5);
+        key.castShadow = true;
+        key.shadow.mapSize.width = 2048;
+        key.shadow.mapSize.height = 2048;
+        key.shadow.camera.near = 0.5;
+        key.shadow.camera.far = 50;
+        key.shadow.camera.left = -10;
+        key.shadow.camera.right = 10;
+        key.shadow.camera.top = 10;
+        key.shadow.camera.bottom = -10;
+        scene.add(key);
+
+        const rim = new THREE.PointLight(0x00aaff, 1, 20);
+        rim.position.set(-5, 3, -5);
+        scene.add(rim);
+
+        const fill = new THREE.PointLight(0xff6600, 0.5, 15);
+        fill.position.set(3, 1, 3);
+        scene.add(fill);
+
+        // Fog
+        scene.fog = new THREE.FogExp2(0x050510, 0.02);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HIGH-RES DRAGON
+    // ═══════════════════════════════════════════════════════════════════
+
+    function hsl(h, s, l) {
+        return new THREE.Color().setHSL(h / 360, s, l);
+    }
+
+    function createDragonMaterial(hue, roughness = 0.4, metalness = 0.3) {
+        return new THREE.MeshStandardMaterial({
+            color: hsl(hue, 0.7, 0.4),
+            roughness,
+            metalness,
+            flatShading: false
+        });
+    }
+
+    function createScaleMaterial(hue) {
+        return new THREE.MeshStandardMaterial({
+            color: hsl(hue, 0.8, 0.35),
+            roughness: 0.3,
+            metalness: 0.5,
+            flatShading: true
+        });
+    }
+
+    function createDragon(hue = 195) {
+        const group = new THREE.Group();
+        const mainMat = createDragonMaterial(hue);
+        const scaleMat = createScaleMaterial(hue);
+        const darkMat = createDragonMaterial(hue, 0.6, 0.2);
+        darkMat.color = hsl(hue, 0.5, 0.25);
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.8 });
+        const hornMat = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.3, metalness: 0.6 });
+
+        // ─── HEAD ───
+        const head = new THREE.Group();
+
+        // Skull (high detail)
+        const skullGeo = new THREE.SphereGeometry(0.5, 32, 24);
+        skullGeo.scale(1.1, 0.9, 1.4);
+        const skull = new THREE.Mesh(skullGeo, mainMat);
+        skull.castShadow = true;
+        head.add(skull);
+
+        // Snout
+        const snoutGeo = new THREE.ConeGeometry(0.3, 0.8, 16);
+        const snout = new THREE.Mesh(snoutGeo, mainMat);
+        snout.rotation.x = -Math.PI / 2;
+        snout.position.z = 0.6;
+        snout.position.y = -0.05;
+        snout.castShadow = true;
+        head.add(snout);
+
+        // Jaw
+        const jawGeo = new THREE.SphereGeometry(0.25, 16, 12);
+        jawGeo.scale(1, 0.5, 1.5);
+        const jaw = new THREE.Mesh(jawGeo, mainMat);
+        jaw.position.set(0, -0.25, 0.3);
+        jaw.castShadow = true;
+        head.add(jaw);
+        head.userData.jaw = jaw;
+
+        // Eyes
+        const eyeGeo = new THREE.SphereGeometry(0.1, 16, 16);
+        const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeL.position.set(0.22, 0.12, 0.4);
+        head.add(eyeL);
+        const eyeR = eyeL.clone();
+        eyeR.position.x = -0.22;
+        head.add(eyeR);
+
+        // Pupils
+        const pupilGeo = new THREE.SphereGeometry(0.04, 8, 8);
+        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const pupilL = new THREE.Mesh(pupilGeo, pupilMat);
+        pupilL.position.set(0.24, 0.12, 0.48);
+        head.add(pupilL);
+        const pupilR = pupilL.clone();
+        pupilR.position.x = -0.24;
+        head.add(pupilR);
+        head.userData.pupils = [pupilL, pupilR];
+
+        // Brow ridges
+        for (let side of [-1, 1]) {
+            const brow = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15, 0.06, 0.3),
+                darkMat
+            );
+            brow.position.set(side * 0.2, 0.25, 0.35);
+            brow.rotation.z = side * 0.3;
+            head.add(brow);
+        }
+
+        // Horns
+        for (let side of [-1, 1]) {
+            const hornGroup = new THREE.Group();
+
+            // Main horn
+            const horn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.6, 12), hornMat);
+            horn.position.y = 0.3;
+            hornGroup.add(horn);
+
+            // Secondary horn
+            const horn2 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.35, 8), hornMat);
+            horn2.position.set(0, 0.15, -0.1);
+            horn2.rotation.x = 0.4;
+            hornGroup.add(horn2);
+
+            hornGroup.position.set(side * 0.28, 0.25, -0.15);
+            hornGroup.rotation.x = -0.4;
+            hornGroup.rotation.z = side * 0.25;
+            head.add(hornGroup);
+        }
+
+        // Ear fins
+        for (let side of [-1, 1]) {
+            const fin = new THREE.Mesh(
+                new THREE.ConeGeometry(0.15, 0.3, 4),
+                scaleMat
+            );
+            fin.rotation.z = side * 1.2;
+            fin.rotation.y = side * 0.3;
+            fin.position.set(side * 0.4, 0.1, -0.2);
+            head.add(fin);
+        }
+
+        // Nostrils
+        for (let side of [-1, 1]) {
+            const nostril = new THREE.Mesh(
+                new THREE.SphereGeometry(0.03, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x111111 })
+            );
+            nostril.position.set(side * 0.08, 0.05, 0.95);
+            head.add(nostril);
+        }
+
+        head.position.set(0, 0.5, 1.2);
+        group.add(head);
+
+        // ─── NECK ───
+        const neckSegments = [];
+        for (let i = 0; i < 6; i++) {
+            const t = i / 5;
+            const size = 0.35 - t * 0.08;
+            const seg = new THREE.Mesh(
+                new THREE.SphereGeometry(size, 20, 16),
+                mainMat
+            );
+            seg.scale.set(1, 0.9, 1.2);
+            seg.position.z = 0.5 + i * 0.28;
+            seg.position.y = 0.3 + t * 0.2;
+            seg.castShadow = true;
+            neckSegments.push(seg);
+            group.add(seg);
+
+            // Neck scales/spikes
+            if (i < 5) {
+                const spike = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.04, 0.15 + (1 - t) * 0.1, 6),
+                    scaleMat
+                );
+                spike.position.copy(seg.position);
+                spike.position.y += size * 0.8;
+                spike.rotation.x = -0.3;
+                group.add(spike);
+            }
+        }
+
+        // ─── BODY ───
+        const bodySegments = [];
+        for (let i = 0; i < 10; i++) {
+            const t = i / 9;
+            const size = 0.45 + Math.sin(t * Math.PI) * 0.15;
+            const seg = new THREE.Mesh(
+                new THREE.SphereGeometry(size, 24, 18),
+                mainMat
+            );
+            seg.scale.set(1.1, 0.9, 1);
+            seg.position.z = -i * 0.4;
+            seg.position.y = 0.1 - t * 0.1;
+            seg.castShadow = true;
+            bodySegments.push(seg);
+            group.add(seg);
+        }
+
+        // Spine spikes
+        for (let i = 0; i < 20; i++) {
+            const t = i / 19;
+            const spikeSize = 0.15 + Math.sin(t * Math.PI * 2) * 0.08;
+            const spike = new THREE.Mesh(
+                new THREE.ConeGeometry(0.05, spikeSize, 6),
+                scaleMat
+            );
+            spike.position.z = 0.3 - i * 0.35;
+            spike.position.y = 0.4 + Math.sin(t * Math.PI) * 0.15;
+            spike.rotation.x = -0.2;
+            spike.castShadow = true;
+            group.add(spike);
+        }
+
+        // ─── TAIL ───
+        const tailSegments = [];
+        for (let i = 0; i < 25; i++) {
+            const t = i / 24;
+            const size = 0.3 * (1 - t * 0.8);
+            const seg = new THREE.Mesh(
+                new THREE.SphereGeometry(Math.max(0.04, size), 12, 10),
+                mainMat
+            );
+            seg.castShadow = true;
+            tailSegments.push(seg);
+            group.add(seg);
+
+            // Tail spikes
+            if (i % 3 === 0 && i < 20) {
+                const spike = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.03, 0.1 * (1 - t), 4),
+                    scaleMat
+                );
+                spike.userData.tailSpike = true;
+                spike.userData.index = i;
+                group.add(spike);
+            }
+        }
+
+        // Tail fin
+        const tailFin = new THREE.Group();
+        for (let i = 0; i < 3; i++) {
+            const fin = new THREE.Mesh(
+                new THREE.ConeGeometry(0.08, 0.25 - i * 0.05, 6),
+                scaleMat
+            );
+            fin.rotation.x = Math.PI / 2;
+            fin.position.z = -i * 0.1;
+            fin.rotation.z = (i - 1) * 0.4;
+            tailFin.add(fin);
+        }
+        tailFin.userData.tailFin = true;
+        group.add(tailFin);
+
+        // ─── WINGS ───
+        const wingL = createWing(mainMat, scaleMat, darkMat, 1);
+        wingL.position.set(0.5, 0.3, -0.3);
+        group.add(wingL);
+
+        const wingR = createWing(mainMat, scaleMat, darkMat, -1);
+        wingR.position.set(-0.5, 0.3, -0.3);
+        group.add(wingR);
+
+        // ─── LEGS ───
+        const legs = [];
+        const legPositions = [
+            { x: 0.4, z: 0.2, front: true },
+            { x: -0.4, z: 0.2, front: true },
+            { x: 0.45, z: -2.5, front: false },
+            { x: -0.45, z: -2.5, front: false }
+        ];
+
+        for (const lp of legPositions) {
+            const leg = createLeg(mainMat, darkMat, lp.front);
+            leg.position.set(lp.x, -0.1, lp.z);
+            legs.push(leg);
+            group.add(leg);
+        }
+
+        // Add scales overlay
+        addScales(group, scaleMat);
+
+        return {
+            group,
+            head,
+            neckSegments,
+            bodySegments,
+            tailSegments,
+            tailFin,
+            wingL,
+            wingR,
+            legs
+        };
+    }
+
+    function createWing(mainMat, scaleMat, darkMat, side) {
+        const wing = new THREE.Group();
+
+        // Arm bone
+        const arm = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.08, 1.2, 12),
+            darkMat
+        );
+        arm.rotation.z = side * 0.8;
+        arm.position.set(side * 0.5, 0.3, 0);
+        arm.castShadow = true;
+        wing.add(arm);
+
+        // Finger bones
+        const fingers = [];
+        for (let i = 0; i < 4; i++) {
+            const len = 1.5 - i * 0.25;
+            const finger = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.04, len, 8),
+                darkMat
+            );
+            finger.position.set(side * (0.9 + i * 0.1), 0.5 - i * 0.15, 0);
+            finger.rotation.z = side * (0.5 + i * 0.15);
+            finger.castShadow = true;
+            fingers.push(finger);
+            wing.add(finger);
+        }
+
+        // Membrane
+        const membraneShape = new THREE.Shape();
+        membraneShape.moveTo(0, 0);
+        membraneShape.lineTo(side * 0.3, 0.2);
+        membraneShape.quadraticCurveTo(side * 1.8, 0.8, side * 2.2, 0.3);
+        membraneShape.quadraticCurveTo(side * 2.4, -0.2, side * 2.0, -0.6);
+        membraneShape.quadraticCurveTo(side * 1.5, -0.9, side * 1.0, -0.8);
+        membraneShape.quadraticCurveTo(side * 0.5, -0.6, 0, -0.3);
+        membraneShape.lineTo(0, 0);
+
+        const membrane = new THREE.Mesh(
+            new THREE.ShapeGeometry(membraneShape),
+            new THREE.MeshStandardMaterial({
+                color: mainMat.color,
+                roughness: 0.6,
+                metalness: 0.2,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.85
+            })
+        );
+        membrane.rotation.x = Math.PI / 2;
+        membrane.position.y = 0.2;
+        membrane.castShadow = true;
+        wing.add(membrane);
+
+        // Wing claws
+        for (let i = 0; i < 2; i++) {
+            const claw = new THREE.Mesh(
+                new THREE.ConeGeometry(0.03, 0.12, 6),
+                darkMat
+            );
+            claw.position.set(side * (0.35 + i * 0.15), 0.15, 0.05);
+            claw.rotation.x = -0.5;
+            wing.add(claw);
+        }
+
+        return wing;
+    }
+
+    function createLeg(mainMat, darkMat, front) {
+        const leg = new THREE.Group();
+        const scale = front ? 0.85 : 1;
+
+        // Upper leg
+        const upper = new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.1 * scale, 0.4 * scale, 8, 12),
+            mainMat
+        );
+        upper.position.y = -0.2 * scale;
+        upper.castShadow = true;
+        leg.add(upper);
+
+        // Lower leg
+        const lower = new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.07 * scale, 0.35 * scale, 8, 12),
+            mainMat
+        );
+        lower.position.y = -0.55 * scale;
+        lower.castShadow = true;
+        leg.add(lower);
+
+        // Foot
+        const foot = new THREE.Mesh(
+            new THREE.SphereGeometry(0.12 * scale, 12, 10),
+            mainMat
+        );
+        foot.scale.set(1.2, 0.6, 1.5);
+        foot.position.y = -0.75 * scale;
+        foot.position.z = 0.05;
+        foot.castShadow = true;
+        leg.add(foot);
+
+        // Claws
+        for (let i = 0; i < 3; i++) {
+            const claw = new THREE.Mesh(
+                new THREE.ConeGeometry(0.025 * scale, 0.1 * scale, 6),
+                darkMat
+            );
+            claw.position.set((i - 1) * 0.06 * scale, -0.8 * scale, 0.15 * scale);
+            claw.rotation.x = -0.8;
+            leg.add(claw);
+        }
+
+        return leg;
+    }
+
+    function addScales(group, scaleMat) {
+        // Add decorative scales to body
+        for (let i = 0; i < 40; i++) {
+            const scale = new THREE.Mesh(
+                new THREE.CircleGeometry(0.06 + Math.random() * 0.04, 6),
+                new THREE.MeshStandardMaterial({
+                    color: scaleMat.color,
+                    roughness: 0.2,
+                    metalness: 0.7,
+                    side: THREE.DoubleSide
+                })
+            );
+
+            const angle = Math.random() * Math.PI * 2;
+            const bodyZ = -Math.random() * 4;
+            const radius = 0.35 + Math.sin((bodyZ + 2) / 4 * Math.PI) * 0.1;
+
+            scale.position.set(
+                Math.cos(angle) * radius,
+                Math.sin(angle) * radius * 0.8 + 0.1,
+                bodyZ
+            );
+            scale.lookAt(scale.position.clone().multiplyScalar(2));
+            scale.userData.decorativeScale = true;
+            group.add(scale);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PARTICLES
+    // ═══════════════════════════════════════════════════════════════════
+
+    function createParticles() {
+        const geo = new THREE.BufferGeometry();
+        const count = 500;
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+
+        for (let i = 0; i < count; i++) {
+            positions[i * 3] = (Math.random() - 0.5) * 30;
+            positions[i * 3 + 1] = Math.random() * 15;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+
+            const c = new THREE.Color().setHSL(0.55 + Math.random() * 0.1, 0.8, 0.6);
+            colors[i * 3] = c.r;
+            colors[i * 3 + 1] = c.g;
+            colors[i * 3 + 2] = c.b;
+        }
+
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const mat = new THREE.PointsMaterial({
+            size: 0.05,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending
+        });
+
+        return new THREE.Points(geo, mat);
+    }
+
+    function createFireParticles() {
+        const geo = new THREE.BufferGeometry();
+        const count = 200;
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+        const sizes = new Float32Array(count);
+
+        for (let i = 0; i < count; i++) {
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = 0;
+            positions[i * 3 + 2] = 0;
+
+            const c = new THREE.Color().setHSL(0.05 + Math.random() * 0.08, 1, 0.5 + Math.random() * 0.3);
+            colors[i * 3] = c.r;
+            colors[i * 3 + 1] = c.g;
+            colors[i * 3 + 2] = c.b;
+
+            sizes[i] = Math.random() * 0.15;
+        }
+
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        const mat = new THREE.PointsMaterial({
+            size: 0.1,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+        });
+
+        const fire = new THREE.Points(geo, mat);
+        fire.visible = false;
+        fire.userData.velocities = [];
+        for (let i = 0; i < count; i++) {
+            fire.userData.velocities.push({
+                x: (Math.random() - 0.5) * 0.1,
+                y: Math.random() * 0.1,
+                z: Math.random() * 0.3,
+                life: 0,
+                maxLife: 30 + Math.random() * 30
+            });
+        }
+        return fire;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ANIMATION
+    // ═══════════════════════════════════════════════════════════════════
+
+    let time = 0;
+
+    function animateDragon() {
+        if (!dragon) return;
+
+        const t = time * animSpeed;
+        const { head, neckSegments, bodySegments, tailSegments, tailFin, wingL, wingR, legs } = dragon;
+
+        // Base breathing
+        dragon.group.position.y = Math.sin(t * 1.5) * 0.03;
+        dragon.group.rotation.x = Math.sin(t * 1.2) * 0.01;
+
+        // Head movement
+        const thinkMod = 0.5 + state.thinking * 0.8;
+        head.rotation.x = Math.sin(t * 2) * 0.08 * thinkMod - 0.05;
+        head.rotation.y = Math.sin(t * 1.5) * 0.15 * state.attention;
+        head.rotation.z = Math.sin(t * 1.8) * 0.03;
+
+        // Jaw movement when generating
+        if (head.userData.jaw) {
+            const jawOpen = state.action === 'generating' ? 0.15 + Math.sin(t * 8) * 0.1 : 0;
+            head.userData.jaw.rotation.x = jawOpen;
+        }
+
+        // Eye tracking
+        if (head.userData.pupils) {
+            head.userData.pupils.forEach(p => {
+                p.position.z = 0.48 + Math.sin(t * 3) * 0.02;
+            });
+        }
+
+        // Neck follows head with delay
+        neckSegments.forEach((seg, i) => {
+            const delay = i * 0.12;
+            seg.rotation.x = Math.sin(t * 2 - delay) * 0.05 * thinkMod;
+            seg.rotation.y = Math.sin(t * 1.5 - delay) * 0.1 * state.attention;
+        });
+
+        // Body subtle movement
+        bodySegments.forEach((seg, i) => {
+            const phase = i * 0.2;
+            seg.rotation.y = Math.sin(t * 1.5 + phase) * 0.02;
+            seg.position.x = Math.sin(t * 2 + phase) * 0.02;
+        });
+
+        // Tail - more movement when thinking
+        const tailWave = 0.2 + state.thinking * 0.6;
+        tailSegments.forEach((seg, i) => {
+            const phase = i * 0.25;
+            const amp = tailWave * Math.pow(i / tailSegments.length, 0.5);
+            seg.position.x = Math.sin(t * 3 + phase) * amp * 0.4;
+            seg.position.y = Math.cos(t * 2 + phase) * amp * 0.15 - 0.05;
+            seg.position.z = -4 - i * 0.22;
+            seg.rotation.y = Math.sin(t * 3 + phase) * amp * 0.8;
+        });
+
+        // Update tail fin position
+        if (tailFin && tailSegments.length > 0) {
+            const lastSeg = tailSegments[tailSegments.length - 1];
+            tailFin.position.copy(lastSeg.position);
+            tailFin.position.z -= 0.2;
+            tailFin.rotation.y = lastSeg.rotation.y;
+        }
+
+        // Update tail spikes
+        dragon.group.children.forEach(child => {
+            if (child.userData.tailSpike) {
+                const i = child.userData.index;
+                if (tailSegments[i]) {
+                    child.position.copy(tailSegments[i].position);
+                    child.position.y += 0.15;
+                    child.rotation.y = tailSegments[i].rotation.y;
+                }
+            }
+        });
+
+        // Wings - confidence affects posture, action affects flapping
+        const wingBase = 0.4 + state.confidence * 0.4;
+        const flapSpeed = state.action === 'generating' ? 8 : 2;
+        const flapAmp = state.action === 'generating' ? 0.4 : 0.1;
+        wingL.rotation.z = wingBase + Math.sin(t * flapSpeed) * flapAmp;
+        wingR.rotation.z = -wingBase - Math.sin(t * flapSpeed) * flapAmp;
+        wingL.rotation.x = Math.sin(t * 2) * 0.1;
+        wingR.rotation.x = Math.sin(t * 2) * 0.1;
+
+        // Leg idle animation
+        legs.forEach((leg, i) => {
+            const phase = i * Math.PI / 2;
+            leg.rotation.x = Math.sin(t * 2 + phase) * 0.05;
+        });
+
+        // Mood effects
+        switch (state.mood) {
+            case 'curious':
+                head.position.z = 1.3 + Math.sin(t) * 0.1;
+                head.rotation.x = -0.2;
+                break;
+            case 'thinking':
+                head.rotation.z = Math.sin(t * 0.5) * 0.15;
+                head.position.y = 0.6 + Math.sin(t * 0.8) * 0.05;
+                break;
+            case 'excited':
+                dragon.group.position.y += Math.abs(Math.sin(t * 6)) * 0.08;
+                break;
+            case 'alert':
+                head.rotation.y = Math.sin(t * 4) * 0.25;
+                break;
+            case 'sleepy':
+                head.position.y = 0.35 + Math.sin(t * 0.5) * 0.02;
+                head.rotation.x = 0.2;
+                break;
+        }
+
+        // Fire breath particles
+        if (fxBreath && fireParticles) {
+            fireParticles.visible = true;
+            const positions = fireParticles.geometry.attributes.position.array;
+            const velocities = fireParticles.userData.velocities;
+
+            // Get head world position
+            const headPos = new THREE.Vector3();
+            head.getWorldPosition(headPos);
+            headPos.z += 0.8;
+
+            for (let i = 0; i < velocities.length; i++) {
+                const v = velocities[i];
+                v.life++;
+
+                if (v.life > v.maxLife) {
+                    // Reset particle
+                    positions[i * 3] = headPos.x + (Math.random() - 0.5) * 0.1;
+                    positions[i * 3 + 1] = headPos.y + (Math.random() - 0.5) * 0.1;
+                    positions[i * 3 + 2] = headPos.z;
+                    v.life = 0;
+                    v.x = (Math.random() - 0.5) * 0.05;
+                    v.y = Math.random() * 0.05 - 0.01;
+                    v.z = 0.1 + Math.random() * 0.2;
+                } else {
+                    positions[i * 3] += v.x;
+                    positions[i * 3 + 1] += v.y;
+                    positions[i * 3 + 2] += v.z;
+                }
+            }
+
+            fireParticles.geometry.attributes.position.needsUpdate = true;
+        } else if (fireParticles) {
+            fireParticles.visible = false;
+        }
+
+        updateServos();
+    }
+
+    function animateParticles() {
+        if (!particles || !fxParticles) return;
+
+        const positions = particles.geometry.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+            positions[i + 1] += 0.01;
+            if (positions[i + 1] > 15) positions[i + 1] = 0;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+        particles.rotation.y += 0.0005;
+    }
+
+    function updateServos() {
+        if (!dragon) return;
+
+        const { head, neckSegments, tailSegments, wingL, wingR } = dragon;
+
+        state.servoAngles.head = Math.round(90 + head.rotation.y * 50);
+        state.servoAngles.neck = Math.round(90 + (neckSegments[0]?.rotation.y || 0) * 50);
+        state.servoAngles.tail1 = Math.round(90 + (tailSegments[8]?.rotation.y || 0) * 25);
+        state.servoAngles.tail2 = Math.round(90 + (tailSegments[18]?.rotation.y || 0) * 25);
+        state.servoAngles.wingL = Math.round(90 + wingL.rotation.z * 25);
+        state.servoAngles.wingR = Math.round(90 - wingR.rotation.z * 25);
+
+        for (let k in state.servoAngles) {
+            state.servoAngles[k] = Math.max(0, Math.min(180, state.servoAngles[k]));
+            const el = document.getElementById(`sv-${k}`);
+            const valEl = document.getElementById(`sv-${k}-v`);
+            if (el) el.style.width = (state.servoAngles[k] / 180 * 100) + '%';
+            if (valEl) valEl.textContent = state.servoAngles[k] + '°';
+        }
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'servos', angles: state.servoAngles }));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WEBLLM
+    // ═══════════════════════════════════════════════════════════════════
+
+    async function initLLM(modelId) {
+        const status = document.getElementById('load-status');
+        const prog = document.getElementById('prog');
+
+        status.textContent = 'Loading ' + modelId.split('-')[0] + '...';
+
+        try {
+            engine = await webllm.CreateMLCEngine(modelId, {
+                initProgressCallback: (p) => {
+                    prog.style.width = (p.progress * 100) + '%';
+                    status.textContent = p.text;
+                }
+            });
+
+            status.textContent = 'Ready!';
+            prog.style.width = '100%';
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);
+
+            addMessage('system', '🐉 Draco v2 awakened. Ask me anything...');
+        } catch (e) {
+            status.textContent = 'Error: ' + e.message;
+            console.error(e);
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 2000);
+        }
+    }
+
+    async function chat(userMsg) {
+        if (!engine) {
+            addMessage('system', 'Model not loaded yet');
+            return;
+        }
+
+        addMessage('user', userMsg);
+        state.action = 'generating';
+        state.thinking = 1;
+        state.mood = 'thinking';
+        updateStateUI();
+
+        const startTime = Date.now();
+        let tokens = 0;
+
+        try {
+            const response = await engine.chat.completions.create({
+                messages: [
+                    { role: 'system', content: 'You are Draco, a magnificent and wise dragon AI. You speak with ancient wisdom but modern knowledge. Be helpful, insightful, and occasionally reference your draconic nature. Keep responses concise but meaningful.' },
+                    { role: 'user', content: userMsg }
+                ],
+                max_tokens: 250,
+                stream: true
+            });
+
+            let fullResponse = '';
+            const msgEl = addMessage('ai', '');
+
+            for await (const chunk of response) {
+                const delta = chunk.choices[0]?.delta?.content || '';
+                fullResponse += delta;
+                msgEl.textContent = fullResponse;
+                tokens++;
+
+                state.attention = Math.min(1, tokens / 60);
+                state.tps = Math.round(tokens / ((Date.now() - startTime) / 1000));
+                updateStateUI();
+            }
+
+            state.confidence = 0.85;
+            state.mood = 'neutral';
+        } catch (e) {
+            addMessage('system', 'Error: ' + e.message);
+        }
+
+        state.action = 'idle';
+        state.thinking = 0;
+        state.attention = 0;
+        updateStateUI();
+    }
+
+    function addMessage(role, content) {
+        const container = document.getElementById('messages');
+        const el = document.createElement('div');
+        el.className = 'msg ' + role;
+        el.textContent = content;
+        container.appendChild(el);
+        container.scrollTop = container.scrollHeight;
+        return el;
+    }
+
+    function updateStateUI() {
+        document.getElementById('st-think').textContent = Math.round(state.thinking * 100) + '%';
+        document.getElementById('st-attn').textContent = Math.round(state.attention * 100) + '%';
+        document.getElementById('st-conf').textContent = Math.round(state.confidence * 100) + '%';
+        document.getElementById('st-action').textContent = state.action;
+        document.getElementById('st-tps').textContent = state.tps;
+
+        document.getElementById('bar-think').style.width = (state.thinking * 100) + '%';
+        document.getElementById('bar-attn').style.width = (state.attention * 100) + '%';
+        document.getElementById('bar-conf').style.width = (state.confidence * 100) + '%';
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ESP32 CONNECTION
+    // ═══════════════════════════════════════════════════════════════════
+
+    function connectESP32() {
+        const url = document.getElementById('ignition-url').value || 'ws://esp32.local:81';
+        const btn = document.getElementById('connect-btn');
+
+        try {
+            ws = new WebSocket(url);
+            ws.onopen = () => { btn.textContent = 'Connected'; btn.classList.add('connected'); addMessage('system', '🔌 ESP32 connected'); };
+            ws.onclose = () => { btn.textContent = 'Connect ESP32'; btn.classList.remove('connected'); };
+            ws.onerror = () => { addMessage('system', '⚠️ ESP32 connection failed'); };
+        } catch (e) {
+            addMessage('system', 'Connection error');
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // UI EVENTS
+    // ═══════════════════════════════════════════════════════════════════
+
+    document.getElementById('chat-send').onclick = () => {
+        const input = document.getElementById('chat-input');
+        if (input.value.trim()) { chat(input.value.trim()); input.value = ''; }
+    };
+    document.getElementById('chat-input').onkeypress = e => { if (e.key === 'Enter') document.getElementById('chat-send').click(); };
+    document.getElementById('model-select').onchange = e => { document.getElementById('loading').classList.remove('hidden'); initLLM(e.target.value); };
+    document.getElementById('anim-speed').oninput = e => { animSpeed = parseFloat(e.target.value); };
+    document.getElementById('dragon-hue').oninput = e => { updateDragonColor(parseInt(e.target.value)); };
+    document.getElementById('mood-select').onchange = e => { state.mood = e.target.value; };
+    document.getElementById('connect-btn').onclick = connectESP32;
+
+    document.getElementById('fx-bloom').onchange = e => { fxBloom = e.target.checked; bloomPass.enabled = fxBloom; };
+    document.getElementById('fx-particles').onchange = e => { fxParticles = e.target.checked; if (particles) particles.visible = fxParticles; };
+    document.getElementById('fx-env').onchange = e => { fxEnv = e.target.checked; };
+    document.getElementById('fx-breath').onchange = e => { fxBreath = e.target.checked; };
+
+    function updateDragonColor(hue) {
+        if (!dragon) return;
+        dragonHue = hue;
+        const mainColor = new THREE.Color().setHSL(hue / 360, 0.7, 0.4);
+        const scaleColor = new THREE.Color().setHSL(hue / 360, 0.8, 0.35);
+
+        dragon.group.traverse(child => {
+            if (child.material && !child.userData.decorativeScale) {
+                if (child.material.emissive) return; // Skip eye materials
+                child.material.color = mainColor.clone();
+            }
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MAIN LOOP
+    // ═══════════════════════════════════════════════════════════════════
+
+    function animate() {
+        requestAnimationFrame(animate);
+        time += 0.016;
+
+        controls.update();
+        animateDragon();
+        animateParticles();
+
+        if (fxBloom) {
+            composer.render();
+        } else {
+            renderer.render(scene, camera);
+        }
+    }
+
+    window.onresize = () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+        composer.setSize(innerWidth, innerHeight);
+    };
+
+    // ═══════════════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════════════
+
+    createEnvironment();
+    dragon = createDragon(dragonHue);
+    dragon.group.castShadow = true;
+    scene.add(dragon.group);
+
+    particles = createParticles();
+    scene.add(particles);
+
+    fireParticles = createFireParticles();
+    scene.add(fireParticles);
+
+    animate();
+    initLLM('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+
+    </script>
+</body>
+</html>

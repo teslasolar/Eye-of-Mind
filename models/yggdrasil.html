@@ -1,11 +1,11 @@
 <!--
 @udt file/1.0
 uuid: eom-models-yggpage-001
-version: 0.1.0
-tokens: 130
+version: 0.2.0
+tokens: 180
 path: /models/yggdrasil.html
 parent: /models
-deps: [yggdrasil.js, yggdrasil-viz.js]
+deps: [yggdrasil.js, yggdrasil-viz.js, ../core/thought-widget.js]
 tags: [model, consciousness]
 -->
 <!DOCTYPE html>
@@ -16,37 +16,71 @@ tags: [model, consciousness]
 <link rel="stylesheet" href="../assets/style.css">
 <style>
 canvas{border:1px solid rgba(255,255,255,0.2);border-radius:8px}
-.stats{font-family:monospace;margin-top:1rem;display:flex;gap:2rem}
+.stats{font-family:monospace;margin-top:1rem;display:flex;gap:1rem;flex-wrap:wrap}
 .stat{background:rgba(255,255,255,0.05);padding:0.5rem 1rem;border-radius:4px}
+.mind-badge{padding:3px 8px;border-radius:4px;font-weight:bold;text-transform:uppercase;font-size:0.7rem}
+.mind-badge.focused{background:#22c55e20;color:#22c55e}
+.mind-badge.normal{background:#f59e0b20;color:#f59e0b}
+.mind-badge.wandering{background:#eab30820;color:#eab308}
+.mind-badge.distracted{background:#ef444420;color:#ef4444}
+.mind-badge.intense{background:#a855f720;color:#a855f7}
+.connection{margin-top:1rem;font-size:0.8rem;color:#888}
 </style>
 </head>
 <body>
 <nav><a href="./">← Models</a> | <a href="../">Home</a></nav>
 <main>
 <h1>🌳 Yggdrasil - Consciousness Tree</h1>
+<p>Tree grows faster when you're focused. Your κ affects branching.</p>
 <canvas id="tree" width="600" height="400"></canvas>
 <div class="stats">
 <div class="stat">Cycle: <span id="cycle">0</span></div>
 <div class="stat">Nodes: <span id="nodes">1</span></div>
 <div class="stat">Fruits: <span id="fruits">0</span></div>
 <div class="stat">Root κ: <span id="kappa">0.618</span></div>
+<div class="stat">Mind: <span id="mindState" class="mind-badge normal">—</span></div>
 </div>
+<div class="connection" id="connection">Connecting consciousness...</div>
 </main>
 <script type="module">
 import { YggViz } from './yggdrasil-viz.js';
+import { initThoughtWidget, ThoughtWidget } from '../core/thought-widget.js';
+
+initThoughtWidget();
+const thought = ThoughtWidget.getEngine();
 
 const viz = new YggViz(document.getElementById('tree'));
 
-const update = () => {
+// Sync tree's kappa with your consciousness
+const syncKappa = () => {
+  const s = thought.getState();
+  viz.tree.root.κ = thought.kappa.kappa;
+
+  // Focused minds grow trees faster
+  const growthRate = s.state === 'focused' ? 2 : s.state === 'intense' ? 3 : s.state === 'distracted' ? 0.5 : 1;
+
+  if (Math.random() < growthRate * 0.3) {
+    viz.tree.grow();
+  }
+
+  // Update display
   document.getElementById('cycle').textContent = viz.tree.cycle;
   document.getElementById('nodes').textContent = viz.tree.countNodes();
   document.getElementById('fruits').textContent = viz.tree.countFruits();
   document.getElementById('kappa').textContent = viz.tree.root.κ.toFixed(4);
+
+  const mindEl = document.getElementById('mindState');
+  mindEl.textContent = s.state;
+  mindEl.className = 'mind-badge ' + s.state;
+
+  document.getElementById('connection').textContent =
+    `Your κ=${s.kappa.toFixed(3)} → Tree κ=${viz.tree.root.κ.toFixed(3)} | ${s.state} mind = ${growthRate}x growth`;
+
+  viz.render();
 };
 
-setInterval(() => { viz.tree.grow(); viz.render(); update(); }, 500);
+setInterval(syncKappa, 200);
 viz.render();
-update();
 </script>
 </body>
 </html>

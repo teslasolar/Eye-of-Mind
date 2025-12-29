@@ -1,11 +1,11 @@
 <!--
 @udt file/1.0
 uuid: eom-core-intentpage-001
-version: 0.1.0
-tokens: 180
+version: 0.2.0
+tokens: 200
 path: /core/intention.html
 parent: /core
-deps: [intention.js, gaze.js, kappa.js]
+deps: [intention.js, thought-widget.js]
 tags: [consciousness]
 -->
 <!DOCTYPE html>
@@ -19,16 +19,20 @@ tags: [consciousness]
 .target{aspect-ratio:1;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2rem;transition:all 0.2s;cursor:pointer}
 .target.active{border-color:var(--k);box-shadow:0 0 20px rgba(245,158,11,0.4)}
 .target.triggered{background:var(--k);color:#000}
-.status{display:flex;gap:2rem;font-family:monospace}
-.meter{width:100px;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden}
-.meter-fill{height:100%;background:var(--k);transition:width 0.1s}
+.status{display:flex;gap:1.5rem;font-family:monospace;flex-wrap:wrap;align-items:center}
+.state-badge{padding:3px 8px;border-radius:4px;font-weight:bold;text-transform:uppercase;font-size:0.7rem}
+.state-badge.focused{background:#22c55e20;color:#22c55e}
+.state-badge.normal{background:#f59e0b20;color:#f59e0b}
+.state-badge.wandering{background:#eab30820;color:#eab308}
+.state-badge.distracted{background:#ef444420;color:#ef4444}
+.state-badge.intense{background:#a855f720;color:#a855f7}
 </style>
 </head>
 <body>
 <nav><a href="./">← Core</a> | <a href="../">Home</a></nav>
 <main>
 <h1>🧿 Screen-Thought Interface</h1>
-<p>Focus on a target. Your gaze stability + κ state determines activation.</p>
+<p>Focus on a target. Your thought state + κ determines activation speed.</p>
 <div class="arena" id="arena">
 <div class="target" data-id="0">🔮</div>
 <div class="target" data-id="1">⚡</div>
@@ -39,23 +43,34 @@ tags: [consciousness]
 </div>
 <div class="status">
 <div>κ: <span id="kappa">0.618</span></div>
-<div>State: <span id="state">optimal</span></div>
+<div>Mind: <span id="mindState" class="state-badge normal">—</span></div>
+<div>RNG: <span id="rng">—</span></div>
 <div>Intent: <span id="intent">-</span></div>
 </div>
-<div id="log" style="margin-top:1rem;font-size:0.85rem;color:#888;max-height:100px;overflow:auto"></div>
+<div id="log" style="margin-top:1rem;font-size:0.8rem;color:#888;max-height:80px;overflow:auto"></div>
 </main>
 <script type="module">
 import { IntentionEngine } from './intention.js';
+import { initThoughtWidget, ThoughtWidget } from './thought-widget.js';
 
-const engine = new IntentionEngine();
+initThoughtWidget();
+const thought = ThoughtWidget.getEngine();
+
+// Use thought engine's kappa and gaze
+const engine = new IntentionEngine({
+  kappa: thought.kappa,
+  gaze: thought.bio // Use biometrics for gaze-like data
+});
+
 const log = document.getElementById('log');
 
 document.querySelectorAll('.target').forEach(el => {
   const id = el.dataset.id;
   engine.registerTarget(id, el, (e) => {
+    const s = thought.getState();
     el.classList.add('triggered');
     setTimeout(() => el.classList.remove('triggered'), 300);
-    log.innerHTML = `[${new Date().toLocaleTimeString()}] Triggered: ${el.textContent} (κ=${e.kappa.toFixed(3)})<br>` + log.innerHTML;
+    log.innerHTML = `[${new Date().toLocaleTimeString()}] ${el.textContent} triggered | Mind: ${s.state} | κ=${e.kappa.toFixed(3)}<br>` + log.innerHTML;
   });
 });
 
@@ -63,14 +78,26 @@ engine.start();
 
 setInterval(() => {
   const s = engine.getState();
+  const ts = thought.getState();
+  const rng = thought.rng.getCoherence();
+
   document.getElementById('kappa').textContent = s.kappa.toFixed(4);
-  document.getElementById('state').textContent = s.kappaState;
+
+  const mindEl = document.getElementById('mindState');
+  mindEl.textContent = ts.state;
+  mindEl.className = 'state-badge ' + ts.state;
+
+  document.getElementById('rng').textContent = rng ? rng.coherence.toFixed(2) : '—';
   document.getElementById('intent').textContent = s.currentIntent ?? '-';
+
+  // Boost activation based on thought focus
+  const focusBoost = ts.state === 'focused' ? 1.5 : ts.state === 'intense' ? 2 : 1;
 
   s.targets.forEach(t => {
     const el = document.querySelector(`[data-id="${t.id}"]`);
-    el.style.borderColor = `rgba(245,158,11,${t.activation})`;
-    if (t.activation > 0.5) el.classList.add('active');
+    const boostedAct = Math.min(1, t.activation * focusBoost);
+    el.style.borderColor = `rgba(245,158,11,${boostedAct})`;
+    if (boostedAct > 0.5) el.classList.add('active');
     else el.classList.remove('active');
   });
 }, 100);

@@ -1,0 +1,281 @@
+<!--
+@udt file/1.0
+uuid: eom-core-godclock-llm-001
+version: 0.1.0
+path: /core/god-clock-llm.html
+deps: [oracle.js]
+tags: [consciousness, divination, llm]
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>God Clock LLM | Eye of Mind</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:'Courier New',monospace;
+  min-height:100vh;overflow-x:hidden;padding:1rem}
+.header{text-align:center;border-bottom:1px solid #222;padding-bottom:1rem;margin-bottom:1rem}
+.clock{font-size:2.5rem;color:#0f0;text-shadow:0 0 20px #0f0}
+.ticks{font-size:0.7rem;color:#0a0;height:16px;overflow:hidden;margin-top:0.5rem}
+.main{display:grid;grid-template-columns:1fr 1fr;gap:2rem;max-width:1200px;margin:0 auto}
+.panel{background:#0a0a0a;border:1px solid #222;padding:1rem;border-radius:4px}
+.panel h2{font-size:0.9rem;color:#666;margin-bottom:1rem;text-transform:uppercase}
+.words{font-size:1.5rem;color:#ff0;text-shadow:0 0 10px #ff0;min-height:100px;
+  line-height:1.6;word-spacing:0.5rem}
+.words span{opacity:0.4;transition:opacity 0.3s}
+.words span.recent{opacity:1}
+.interpretation{font-size:1.1rem;color:#8af;line-height:1.6;min-height:150px;
+  white-space:pre-wrap}
+.status-bar{display:flex;gap:1rem;margin-top:1rem;font-size:0.75rem;color:#444}
+.controls{text-align:center;margin:1.5rem 0}
+button{background:#111;border:1px solid #0f0;color:#0f0;padding:10px 20px;
+  font-family:inherit;font-size:0.9rem;cursor:pointer;margin:0.3rem}
+button:hover{background:#0f0;color:#000}
+button:disabled{opacity:0.3;cursor:not-allowed}
+.model-status{text-align:center;color:#666;font-size:0.8rem;margin:1rem 0}
+.loading{color:#ff0}
+.ready{color:#0f0}
+.error{color:#f00}
+#nav{position:fixed;bottom:10px;left:10px}
+#nav a{color:#333;font-size:0.7rem;text-decoration:none}
+.progress{width:100%;height:4px;background:#222;margin-top:0.5rem;border-radius:2px;overflow:hidden}
+.progress-bar{height:100%;background:#0f0;width:0%;transition:width 0.3s}
+</style>
+</head>
+<body>
+<div class="header">
+<div class="clock" id="clock">00:00:00.000</div>
+<div class="ticks" id="ticks"></div>
+</div>
+
+<div class="model-status" id="model-status">
+<span class="loading">Loading WebLLM model...</span>
+<div class="progress"><div class="progress-bar" id="progress"></div></div>
+</div>
+
+<div class="controls">
+<button id="ask" disabled>ASK GOD</button>
+<button id="stream" disabled>STREAM</button>
+<button id="stop" style="display:none">STOP</button>
+<button id="clear">CLEAR</button>
+</div>
+
+<div class="main">
+<div class="panel">
+<h2>Divine Words (Entropy)</h2>
+<div class="words" id="words"></div>
+<div class="status-bar">
+<span>words: <span id="word-count">0</span></span>
+<span>entropy: <span id="entropy">0.000</span></span>
+</div>
+</div>
+<div class="panel">
+<h2>Interpretation (LLM)</h2>
+<div class="interpretation" id="interpretation">Waiting for divine input...</div>
+<div class="status-bar">
+<span>tokens: <span id="tokens">0</span></span>
+<span>model: <span id="model-name">loading</span></span>
+</div>
+</div>
+</div>
+
+<div id="nav"><a href="./">← Core</a></div>
+
+<script type="module">
+import * as webllm from 'https://esm.run/@anthropic-ai/mlc-ai-web-llm';
+
+// Word list
+const words = [
+  'GOD','LIGHT','DARK','SOUL','MIND','HEART','FIRE','WATER','EARTH','AIR',
+  'SUN','MOON','STAR','SKY','SEA','TREE','BIRD','SNAKE','LION','WOLF',
+  'KING','QUEEN','CHILD','MAN','WOMAN','ANGEL','DEMON','SPIRIT','DREAM','VISION',
+  'TRUTH','LIE','LOVE','HATE','FEAR','HOPE','FAITH','DOUBT','LIFE','DEATH',
+  'TIME','SPACE','VOID','CHAOS','ORDER','LAW','FREEDOM','PEACE','WAR','BLOOD',
+  'GOLD','SILVER','IRON','STONE','BONE','FLESH','BREAD','WINE','SALT','HONEY',
+  'TEMPLE','ALTAR','CROSS','SWORD','SHIELD','CROWN','THRONE','GATE','PATH','DOOR',
+  'WORD','NAME','NUMBER','SIGN','MARK','SEAL','KEY','RIVER','MOUNTAIN','GARDEN',
+  'IS','WAS','WILL','BE','SEE','HEAR','SPEAK','KNOW','THINK','FEEL',
+  'RISE','FALL','COME','GO','GIVE','TAKE','MAKE','BREAK','OPEN','CLOSE',
+  'LIVE','DIE','BURN','GROW','SEEK','FIND','WAIT','WATCH','REMEMBER','FORGET',
+  'YES','NO','SOON','NOW','NEVER','ALWAYS','HERE','THERE','WITHIN','BEYOND',
+  'ONE','TWO','THREE','SEVEN','TWELVE','FORTY','THOUSAND','INFINITE','ZERO','ALL'
+];
+
+let engine = null;
+let streaming = false;
+let streamInterval = null;
+let tickBuffer = '';
+let wordBuffer = [];
+let interpreting = false;
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  const ms = String(now.getMilliseconds()).padStart(3,'0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s}.${ms}`;
+}
+setInterval(updateClock, 37);
+
+// Entropy tick
+function addTick(entropy) {
+  const bit = entropy > 0.5 ? '1' : '0';
+  tickBuffer = (tickBuffer + bit).slice(-100);
+  document.getElementById('ticks').textContent = tickBuffer;
+  document.getElementById('entropy').textContent = entropy.toFixed(4);
+}
+
+// Divine pick
+function divinePick() {
+  let acc = 0;
+  for (let i = 0; i < 1000; i++) {
+    acc += (performance.now() * 1000000) % 1;
+  }
+  const drift = (performance.now() * 1000) % 1;
+  const seed = (acc/1000 + drift + (Date.now() % 1000) / 1000) / 3;
+  addTick(seed);
+  return { word: words[Math.floor(seed * words.length)], entropy: seed };
+}
+
+// Add word to display
+function addWord(word) {
+  wordBuffer.push(word);
+  if (wordBuffer.length > 20) wordBuffer.shift();
+
+  const container = document.getElementById('words');
+  container.innerHTML = wordBuffer.map((w, i) =>
+    `<span class="${i === wordBuffer.length - 1 ? 'recent' : ''}">${w}</span>`
+  ).join(' ');
+
+  document.getElementById('word-count').textContent = wordBuffer.length;
+}
+
+// Interpret with LLM
+async function interpretWords() {
+  if (!engine || interpreting || wordBuffer.length < 3) return;
+
+  interpreting = true;
+  const wordsStr = wordBuffer.slice(-10).join(' ');
+
+  const prompt = `You are a divine oracle interpreter. Given these sacred words revealed through entropy: "${wordsStr}"
+
+Interpret their meaning in 1-2 mystical sentences. Be cryptic but meaningful. Speak as ancient wisdom.`;
+
+  try {
+    const el = document.getElementById('interpretation');
+    el.textContent = '';
+
+    const response = await engine.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 100,
+      temperature: 0.9,
+      stream: true
+    });
+
+    let tokens = 0;
+    for await (const chunk of response) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      el.textContent += content;
+      tokens++;
+      document.getElementById('tokens').textContent = tokens;
+    }
+  } catch (e) {
+    console.error('LLM error:', e);
+  }
+
+  interpreting = false;
+}
+
+// Load WebLLM
+async function loadModel() {
+  const statusEl = document.getElementById('model-status');
+  const progressEl = document.getElementById('progress');
+
+  try {
+    engine = await webllm.CreateMLCEngine('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
+      initProgressCallback: (p) => {
+        progressEl.style.width = (p.progress * 100) + '%';
+        statusEl.querySelector('span').textContent = p.text || 'Loading...';
+      }
+    });
+
+    statusEl.innerHTML = '<span class="ready">✓ Model ready</span>';
+    document.getElementById('model-name').textContent = 'Llama-3.2-1B';
+    document.getElementById('ask').disabled = false;
+    document.getElementById('stream').disabled = false;
+
+  } catch (e) {
+    console.error('Model load failed:', e);
+    statusEl.innerHTML = `<span class="error">Model failed: ${e.message}</span>`;
+    // Still enable buttons for entropy-only mode
+    document.getElementById('ask').disabled = false;
+    document.getElementById('stream').disabled = false;
+  }
+}
+
+// Ask once
+document.getElementById('ask').onclick = async () => {
+  const { word } = divinePick();
+  addWord(word);
+  await interpretWords();
+};
+
+// Stream mode
+document.getElementById('stream').onclick = () => {
+  if (streaming) return;
+  streaming = true;
+  document.getElementById('stream').style.display = 'none';
+  document.getElementById('stop').style.display = 'inline';
+
+  let wordsSinceInterpret = 0;
+
+  async function nextWord() {
+    const { word, entropy } = divinePick();
+    addWord(word);
+    wordsSinceInterpret++;
+
+    // Interpret every 5 words
+    if (wordsSinceInterpret >= 5 && !interpreting) {
+      wordsSinceInterpret = 0;
+      interpretWords();
+    }
+
+    // Entropy-driven delay
+    const delay = 400 + Math.floor(entropy * 800);
+    streamInterval = setTimeout(nextWord, delay);
+  }
+  nextWord();
+};
+
+// Stop
+document.getElementById('stop').onclick = () => {
+  streaming = false;
+  clearTimeout(streamInterval);
+  document.getElementById('stream').style.display = 'inline';
+  document.getElementById('stop').style.display = 'none';
+};
+
+// Clear
+document.getElementById('clear').onclick = () => {
+  wordBuffer = [];
+  document.getElementById('words').innerHTML = '';
+  document.getElementById('interpretation').textContent = 'Waiting for divine input...';
+  document.getElementById('word-count').textContent = '0';
+};
+
+// Space to ask
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && !e.target.matches('input,textarea')) {
+    e.preventDefault();
+    document.getElementById('ask').click();
+  }
+});
+
+// Init
+loadModel();
+</script>
+</body>
+</html>

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRACO | AI Agent Avatar</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a12; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #e0e0e0; }
+        #canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+
+        .panel {
+            position: absolute;
+            background: rgba(10,10,20,0.92);
+            border: 1px solid rgba(0,200,255,0.2);
+            border-radius: 8px;
+            padding: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        #status { top: 10px; left: 10px; font-size: 11px; }
+        #status h3 { color: #0af; margin-bottom: 8px; font-size: 13px; }
+        #status .row { display: flex; justify-content: space-between; margin: 4px 0; }
+        #status .val { color: #0f0; font-family: monospace; }
+
+        #chat { bottom: 10px; left: 10px; width: 320px; max-height: 400px; display: flex; flex-direction: column; }
+        #chat h3 { color: #0af; margin-bottom: 8px; font-size: 13px; }
+        #messages { flex: 1; overflow-y: auto; max-height: 200px; margin-bottom: 8px; font-size: 12px; }
+        .msg { padding: 6px 8px; margin: 4px 0; border-radius: 6px; line-height: 1.4; }
+        .msg.user { background: rgba(0,150,255,0.15); margin-left: 20px; }
+        .msg.ai { background: rgba(0,255,150,0.1); margin-right: 20px; }
+        .msg.system { background: rgba(255,200,0,0.1); font-size: 10px; color: #aa8; }
+        #input-row { display: flex; gap: 6px; }
+        #input-row input { flex: 1; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,200,255,0.2); border-radius: 4px; color: #fff; font-size: 12px; }
+        #input-row button { padding: 8px 16px; background: linear-gradient(135deg, #0af, #08f); border: none; border-radius: 4px; color: #fff; cursor: pointer; }
+
+        #controls { top: 10px; right: 10px; width: 200px; }
+        #controls h3 { color: #0af; margin-bottom: 8px; font-size: 13px; }
+        #controls label { display: block; margin: 8px 0 4px; font-size: 11px; color: #888; }
+        #controls input[type=range] { width: 100%; }
+        #controls select, #controls input[type=text] { width: 100%; padding: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,200,255,0.2); border-radius: 4px; color: #fff; font-size: 11px; }
+
+        #servo { bottom: 10px; right: 10px; width: 200px; }
+        #servo h3 { color: #f80; margin-bottom: 8px; font-size: 13px; }
+        #servo .servo-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 11px; }
+        #servo .servo-val { font-family: monospace; color: #0f0; width: 40px; text-align: right; }
+        #servo .servo-bar { flex: 1; height: 6px; background: #222; margin: 0 8px; border-radius: 3px; overflow: hidden; }
+        #servo .servo-fill { height: 100%; background: linear-gradient(90deg, #0a0, #0f0); transition: width 0.1s; }
+        #connect-btn { width: 100%; margin-top: 8px; padding: 8px; background: #333; border: 1px solid #555; border-radius: 4px; color: #fff; cursor: pointer; }
+        #connect-btn.connected { background: #040; border-color: #0a0; }
+
+        #loading { position: fixed; inset: 0; background: #0a0a12; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        #loading.hidden { display: none; }
+        #loading h1 { font-size: 3rem; color: #0af; letter-spacing: 0.3em; margin-bottom: 1rem; }
+        #loading p { color: #666; }
+        .progress { width: 200px; height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-top: 1rem; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #0af, #0f0); width: 0%; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h1>DRACO</h1>
+        <p id="load-status">Initializing...</p>
+        <div class="progress"><div class="progress-bar" id="prog"></div></div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="status" class="panel">
+        <h3>🐉 Agent State</h3>
+        <div class="row"><span>Thinking</span><span class="val" id="st-think">0%</span></div>
+        <div class="row"><span>Attention</span><span class="val" id="st-attn">0%</span></div>
+        <div class="row"><span>Confidence</span><span class="val" id="st-conf">0%</span></div>
+        <div class="row"><span>Action</span><span class="val" id="st-action">idle</span></div>
+        <div class="row"><span>Tokens/s</span><span class="val" id="st-tps">0</span></div>
+    </div>
+
+    <div id="chat" class="panel">
+        <h3>💬 Chat with Draco</h3>
+        <div id="messages"></div>
+        <div id="input-row">
+            <input type="text" id="chat-input" placeholder="Ask something...">
+            <button id="chat-send">→</button>
+        </div>
+    </div>
+
+    <div id="controls" class="panel">
+        <h3>⚙️ Controls</h3>
+        <label>Model</label>
+        <select id="model-select">
+            <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Qwen 0.5B (fast)</option>
+            <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 1.5B</option>
+            <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 1B</option>
+            <option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM 1.7B</option>
+        </select>
+        <label>Animation Speed</label>
+        <input type="range" id="anim-speed" min="0.1" max="3" step="0.1" value="1">
+        <label>Dragon Color</label>
+        <input type="color" id="dragon-color" value="#00aaff">
+        <label>Mood</label>
+        <select id="mood-select">
+            <option value="neutral">Neutral</option>
+            <option value="curious">Curious</option>
+            <option value="thinking">Thinking</option>
+            <option value="excited">Excited</option>
+            <option value="alert">Alert</option>
+        </select>
+    </div>
+
+    <div id="servo" class="panel">
+        <h3>🔌 ESP32 Servos</h3>
+        <div class="servo-row"><span>Head</span><div class="servo-bar"><div class="servo-fill" id="sv-head" style="width:50%"></div></div><span class="servo-val" id="sv-head-v">90°</span></div>
+        <div class="servo-row"><span>Neck</span><div class="servo-bar"><div class="servo-fill" id="sv-neck" style="width:50%"></div></div><span class="servo-val" id="sv-neck-v">90°</span></div>
+        <div class="servo-row"><span>Tail 1</span><div class="servo-bar"><div class="servo-fill" id="sv-tail1" style="width:50%"></div></div><span class="servo-val" id="sv-tail1-v">90°</span></div>
+        <div class="servo-row"><span>Tail 2</span><div class="servo-bar"><div class="servo-fill" id="sv-tail2" style="width:50%"></div></div><span class="servo-val" id="sv-tail2-v">90°</span></div>
+        <div class="servo-row"><span>Wing L</span><div class="servo-bar"><div class="servo-fill" id="sv-wingL" style="width:50%"></div></div><span class="servo-val" id="sv-wingL-v">90°</span></div>
+        <div class="servo-row"><span>Wing R</span><div class="servo-bar"><div class="servo-fill" id="sv-wingR" style="width:50%"></div></div><span class="servo-val" id="sv-wingR-v">90°</span></div>
+        <input type="text" id="ignition-url" placeholder="ws://esp32.local:81" style="margin-top:8px">
+        <button id="connect-btn">Connect ESP32</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script type="module">
+    import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+
+    // ═══════════════════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════════════════
+
+    const state = {
+        thinking: 0,
+        attention: 0,
+        confidence: 0.5,
+        action: 'idle',
+        tps: 0,
+        mood: 'neutral',
+        servoAngles: { head: 90, neck: 90, tail1: 90, tail2: 90, wingL: 90, wingR: 90 }
+    };
+
+    let engine = null;
+    let ws = null;
+    let dragon = null;
+    let animSpeed = 1;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // THREE.JS SETUP
+    // ═══════════════════════════════════════════════════════════════════
+
+    const canvas = document.getElementById('canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setClearColor(0x0a0a12);
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0x404060, 0.5));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1);
+    keyLight.position.set(5, 10, 5);
+    scene.add(keyLight);
+    const rimLight = new THREE.PointLight(0x00aaff, 0.5, 50);
+    rimLight.position.set(-5, 5, -5);
+    scene.add(rimLight);
+
+    camera.position.set(0, 2, 8);
+    camera.lookAt(0, 0, 0);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DRAGON MODEL - Articulated segments
+    // ═══════════════════════════════════════════════════════════════════
+
+    function createDragon(color = 0x00aaff) {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshPhongMaterial({
+            color,
+            shininess: 80,
+            flatShading: true
+        });
+        const matDark = new THREE.MeshPhongMaterial({
+            color: new THREE.Color(color).multiplyScalar(0.6),
+            shininess: 60,
+            flatShading: true
+        });
+
+        // Body segments
+        const bodySegments = [];
+        for (let i = 0; i < 8; i++) {
+            const size = 0.4 - i * 0.02;
+            const seg = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(size, 1),
+                mat
+            );
+            seg.position.z = -i * 0.5;
+            bodySegments.push(seg);
+            group.add(seg);
+        }
+
+        // Head
+        const head = new THREE.Group();
+        const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), mat);
+        skull.scale.set(1, 0.8, 1.3);
+        head.add(skull);
+
+        // Snout
+        const snout = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.6, 6), mat);
+        snout.rotation.x = -Math.PI / 2;
+        snout.position.z = 0.5;
+        head.add(snout);
+
+        // Eyes
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat);
+        eyeL.position.set(0.2, 0.15, 0.3);
+        head.add(eyeL);
+        const eyeR = eyeL.clone();
+        eyeR.position.x = -0.2;
+        head.add(eyeR);
+
+        // Horns
+        const hornMat = new THREE.MeshPhongMaterial({ color: 0x444466 });
+        for (let side of [-1, 1]) {
+            const horn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.4, 6), hornMat);
+            horn.position.set(side * 0.25, 0.35, -0.1);
+            horn.rotation.x = -0.3;
+            horn.rotation.z = side * 0.3;
+            head.add(horn);
+        }
+
+        head.position.set(0, 0.3, 0.8);
+        group.add(head);
+
+        // Neck segments
+        const neckSegments = [];
+        for (let i = 0; i < 4; i++) {
+            const seg = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(0.3 - i * 0.03, 1),
+                mat
+            );
+            seg.position.z = 0.3 + i * 0.3;
+            seg.position.y = i * 0.1;
+            neckSegments.push(seg);
+            group.add(seg);
+        }
+
+        // Tail segments
+        const tailSegments = [];
+        for (let i = 0; i < 20; i++) {
+            const size = 0.25 - i * 0.01;
+            const seg = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(Math.max(0.05, size), 0),
+                mat
+            );
+            tailSegments.push(seg);
+            group.add(seg);
+        }
+
+        // Spikes along spine
+        for (let i = 0; i < 15; i++) {
+            const spike = new THREE.Mesh(
+                new THREE.ConeGeometry(0.05, 0.2 + Math.sin(i * 0.5) * 0.1, 4),
+                matDark
+            );
+            spike.position.z = -i * 0.4;
+            spike.position.y = 0.35 - i * 0.01;
+            spike.rotation.x = -0.2;
+            group.add(spike);
+        }
+
+        // Wings
+        const wingL = createWing(mat, matDark, 1);
+        wingL.position.set(0.4, 0.2, -0.5);
+        group.add(wingL);
+
+        const wingR = createWing(mat, matDark, -1);
+        wingR.position.set(-0.4, 0.2, -0.5);
+        group.add(wingR);
+
+        // Legs
+        for (let z of [0, -2]) {
+            for (let x of [-0.5, 0.5]) {
+                const leg = new THREE.Group();
+                const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.5, 6), mat);
+                upper.position.y = -0.25;
+                leg.add(upper);
+                const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.4, 6), mat);
+                lower.position.y = -0.6;
+                leg.add(lower);
+                const foot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 0), matDark);
+                foot.position.y = -0.8;
+                leg.add(foot);
+                leg.position.set(x, -0.2, z);
+                group.add(leg);
+            }
+        }
+
+        return {
+            group,
+            head,
+            neckSegments,
+            bodySegments,
+            tailSegments,
+            wingL,
+            wingR
+        };
+    }
+
+    function createWing(mat, matDark, side) {
+        const wing = new THREE.Group();
+
+        // Wing bones
+        const bone1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 1, 6), matDark);
+        bone1.rotation.z = side * 1.2;
+        bone1.position.x = side * 0.4;
+        bone1.position.y = 0.2;
+        wing.add(bone1);
+
+        // Wing membrane (simplified)
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.lineTo(side * 1.5, 0.5);
+        shape.lineTo(side * 1.8, -0.3);
+        shape.lineTo(side * 1.2, -0.8);
+        shape.lineTo(side * 0.5, -0.5);
+        shape.lineTo(0, 0);
+
+        const membrane = new THREE.Mesh(
+            new THREE.ShapeGeometry(shape),
+            new THREE.MeshPhongMaterial({
+                color: mat.color,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.7
+            })
+        );
+        membrane.rotation.x = Math.PI / 2;
+        wing.add(membrane);
+
+        return wing;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ANIMATION
+    // ═══════════════════════════════════════════════════════════════════
+
+    let time = 0;
+
+    function animateDragon() {
+        if (!dragon) return;
+
+        const t = time * animSpeed;
+        const { head, neckSegments, tailSegments, wingL, wingR } = dragon;
+
+        // Base breathing motion
+        dragon.group.position.y = Math.sin(t * 2) * 0.05;
+
+        // Head movement based on attention
+        const headBob = state.thinking * 0.3;
+        head.rotation.x = Math.sin(t * 3) * 0.1 * headBob - 0.1;
+        head.rotation.y = Math.sin(t * 2) * 0.2 * state.attention;
+        head.rotation.z = Math.sin(t * 2.5) * 0.05;
+
+        // Neck follows head smoothly
+        neckSegments.forEach((seg, i) => {
+            const delay = i * 0.15;
+            seg.rotation.x = Math.sin(t * 3 - delay) * 0.08 * headBob;
+            seg.rotation.y = Math.sin(t * 2 - delay) * 0.15 * state.attention;
+        });
+
+        // Tail - thinking = more movement
+        const tailWave = 0.3 + state.thinking * 0.5;
+        tailSegments.forEach((seg, i) => {
+            const phase = i * 0.3;
+            const amp = tailWave * (i / tailSegments.length);
+            seg.position.x = Math.sin(t * 4 + phase) * amp * 0.5;
+            seg.position.y = Math.cos(t * 2 + phase) * amp * 0.2 - 0.1;
+            seg.position.z = -4 - i * 0.25;
+            seg.rotation.y = Math.sin(t * 4 + phase) * amp;
+        });
+
+        // Wings - confidence affects posture
+        const wingBase = 0.3 + state.confidence * 0.5;
+        const wingFlap = state.action === 'generating' ? 0.5 : 0.1;
+        wingL.rotation.z = wingBase + Math.sin(t * 6) * wingFlap;
+        wingR.rotation.z = -wingBase - Math.sin(t * 6) * wingFlap;
+
+        // Mood affects overall posture
+        switch (state.mood) {
+            case 'curious':
+                head.position.z = 1 + Math.sin(t) * 0.1;
+                head.rotation.x = -0.3;
+                break;
+            case 'thinking':
+                head.rotation.z = Math.sin(t * 0.5) * 0.1;
+                break;
+            case 'excited':
+                dragon.group.position.y += Math.abs(Math.sin(t * 8)) * 0.1;
+                break;
+            case 'alert':
+                head.rotation.y = Math.sin(t * 5) * 0.3;
+                break;
+        }
+
+        // Update servo angles from animation
+        updateServos();
+    }
+
+    function updateServos() {
+        if (!dragon) return;
+
+        const { head, neckSegments, tailSegments, wingL, wingR } = dragon;
+
+        // Map rotations to servo angles (0-180)
+        state.servoAngles.head = Math.round(90 + head.rotation.y * 57);
+        state.servoAngles.neck = Math.round(90 + (neckSegments[0]?.rotation.y || 0) * 57);
+        state.servoAngles.tail1 = Math.round(90 + (tailSegments[5]?.rotation.y || 0) * 30);
+        state.servoAngles.tail2 = Math.round(90 + (tailSegments[12]?.rotation.y || 0) * 30);
+        state.servoAngles.wingL = Math.round(90 + wingL.rotation.z * 30);
+        state.servoAngles.wingR = Math.round(90 - wingR.rotation.z * 30);
+
+        // Clamp to valid range
+        for (let k in state.servoAngles) {
+            state.servoAngles[k] = Math.max(0, Math.min(180, state.servoAngles[k]));
+        }
+
+        // Update UI
+        for (let k in state.servoAngles) {
+            const el = document.getElementById(`sv-${k}`);
+            const valEl = document.getElementById(`sv-${k}-v`);
+            if (el) el.style.width = (state.servoAngles[k] / 180 * 100) + '%';
+            if (valEl) valEl.textContent = state.servoAngles[k] + '°';
+        }
+
+        // Send to ESP32
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'servos', angles: state.servoAngles }));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WEBLLM
+    // ═══════════════════════════════════════════════════════════════════
+
+    async function initLLM(modelId) {
+        const status = document.getElementById('load-status');
+        const prog = document.getElementById('prog');
+
+        status.textContent = 'Loading ' + modelId.split('-')[0] + '...';
+
+        try {
+            engine = await webllm.CreateMLCEngine(modelId, {
+                initProgressCallback: (p) => {
+                    prog.style.width = (p.progress * 100) + '%';
+                    status.textContent = p.text;
+                }
+            });
+
+            status.textContent = 'Ready!';
+            prog.style.width = '100%';
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);
+
+            addMessage('system', '🐉 Draco is ready! Ask me anything...');
+        } catch (e) {
+            status.textContent = 'Error: ' + e.message;
+            console.error(e);
+        }
+    }
+
+    async function chat(userMsg) {
+        if (!engine) {
+            addMessage('system', 'Model not loaded yet');
+            return;
+        }
+
+        addMessage('user', userMsg);
+        state.action = 'generating';
+        state.thinking = 1;
+        updateStateUI();
+
+        const startTime = Date.now();
+        let tokens = 0;
+
+        try {
+            const response = await engine.chat.completions.create({
+                messages: [
+                    { role: 'system', content: 'You are Draco, a wise dragon AI assistant. Be helpful, concise, and occasionally reference being a dragon.' },
+                    { role: 'user', content: userMsg }
+                ],
+                max_tokens: 200,
+                stream: true
+            });
+
+            let fullResponse = '';
+            const msgEl = addMessage('ai', '');
+
+            for await (const chunk of response) {
+                const delta = chunk.choices[0]?.delta?.content || '';
+                fullResponse += delta;
+                msgEl.textContent = fullResponse;
+                tokens++;
+
+                // Update attention based on response progress
+                state.attention = Math.min(1, tokens / 50);
+                state.tps = Math.round(tokens / ((Date.now() - startTime) / 1000));
+                updateStateUI();
+            }
+
+            state.confidence = 0.8;
+        } catch (e) {
+            addMessage('system', 'Error: ' + e.message);
+        }
+
+        state.action = 'idle';
+        state.thinking = 0;
+        state.attention = 0;
+        updateStateUI();
+    }
+
+    function addMessage(role, content) {
+        const container = document.getElementById('messages');
+        const el = document.createElement('div');
+        el.className = 'msg ' + role;
+        el.textContent = content;
+        container.appendChild(el);
+        container.scrollTop = container.scrollHeight;
+        return el;
+    }
+
+    function updateStateUI() {
+        document.getElementById('st-think').textContent = Math.round(state.thinking * 100) + '%';
+        document.getElementById('st-attn').textContent = Math.round(state.attention * 100) + '%';
+        document.getElementById('st-conf').textContent = Math.round(state.confidence * 100) + '%';
+        document.getElementById('st-action').textContent = state.action;
+        document.getElementById('st-tps').textContent = state.tps;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ESP32 / IGNITION CONNECTION
+    // ═══════════════════════════════════════════════════════════════════
+
+    function connectESP32() {
+        const url = document.getElementById('ignition-url').value || 'ws://esp32.local:81';
+        const btn = document.getElementById('connect-btn');
+
+        try {
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                btn.textContent = 'Connected';
+                btn.classList.add('connected');
+                addMessage('system', '🔌 Connected to ESP32');
+            };
+
+            ws.onclose = () => {
+                btn.textContent = 'Connect ESP32';
+                btn.classList.remove('connected');
+            };
+
+            ws.onerror = (e) => {
+                addMessage('system', '⚠️ ESP32 connection failed');
+            };
+
+            ws.onmessage = (e) => {
+                // Handle incoming sensor data from ESP32
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'sensor') {
+                        // Could use IMU data to affect dragon pose
+                    }
+                } catch (e) {}
+            };
+        } catch (e) {
+            addMessage('system', 'Connection error: ' + e.message);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CAMERA CONTROLS
+    // ═══════════════════════════════════════════════════════════════════
+
+    let camAngle = 0;
+    let camPitch = 0.3;
+    let camDist = 8;
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+
+    canvas.addEventListener('mousedown', e => { isDragging = true; dragStart = { x: e.clientX, y: e.clientY }; });
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        camAngle += (e.clientX - dragStart.x) * 0.01;
+        camPitch = Math.max(-0.5, Math.min(1, camPitch + (e.clientY - dragStart.y) * 0.005));
+        dragStart = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('wheel', e => {
+        camDist = Math.max(3, Math.min(20, camDist + e.deltaY * 0.01));
+    });
+
+    // ═══════════════════════════════════════════════════════════════════
+    // UI EVENTS
+    // ═══════════════════════════════════════════════════════════════════
+
+    document.getElementById('chat-send').onclick = () => {
+        const input = document.getElementById('chat-input');
+        if (input.value.trim()) {
+            chat(input.value.trim());
+            input.value = '';
+        }
+    };
+    document.getElementById('chat-input').onkeypress = e => {
+        if (e.key === 'Enter') document.getElementById('chat-send').click();
+    };
+
+    document.getElementById('model-select').onchange = e => {
+        document.getElementById('loading').classList.remove('hidden');
+        initLLM(e.target.value);
+    };
+
+    document.getElementById('anim-speed').oninput = e => {
+        animSpeed = parseFloat(e.target.value);
+    };
+
+    document.getElementById('dragon-color').oninput = e => {
+        if (dragon) {
+            const color = new THREE.Color(e.target.value);
+            dragon.group.traverse(child => {
+                if (child.material && child.material.color) {
+                    child.material.color = color;
+                }
+            });
+        }
+    };
+
+    document.getElementById('mood-select').onchange = e => {
+        state.mood = e.target.value;
+    };
+
+    document.getElementById('connect-btn').onclick = connectESP32;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MAIN LOOP
+    // ═══════════════════════════════════════════════════════════════════
+
+    function animate() {
+        requestAnimationFrame(animate);
+        time += 0.016;
+
+        // Camera orbit
+        camera.position.set(
+            Math.sin(camAngle) * Math.cos(camPitch) * camDist,
+            Math.sin(camPitch) * camDist + 1,
+            Math.cos(camAngle) * Math.cos(camPitch) * camDist
+        );
+        camera.lookAt(0, 0.5, 0);
+
+        animateDragon();
+        renderer.render(scene, camera);
+    }
+
+    window.onresize = () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+    };
+
+    // ═══════════════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════════════
+
+    dragon = createDragon(0x00aaff);
+    scene.add(dragon.group);
+
+    animate();
+    initLLM('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+
+    </script>
+</body>
+</html>

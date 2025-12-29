@@ -2,22 +2,32 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Genesis</title>
+<title>Genesis Pro</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#0f0;font:11px/1.4 monospace;height:100vh;display:flex;flex-direction:column}
-.top{display:flex;gap:8px;padding:8px;background:#0a0a0a;border-bottom:1px solid #1a1a1a;align-items:center}
+.top{display:flex;gap:8px;padding:8px;background:#0a0a0a;border-bottom:1px solid #1a1a1a;align-items:center;flex-wrap:wrap}
 .top button{background:#0f0;color:#000;border:none;padding:6px 12px;cursor:pointer;font:bold 10px monospace}
 .top button:disabled{opacity:0.3}
-.top .ent{color:#0a0;margin-left:auto}
+.top .sec{background:#222;color:#0f0}
 .top select{background:#111;color:#0f0;border:1px solid #222;padding:4px;font:10px monospace}
-.log{height:80px;background:#050505;border-bottom:1px solid #1a1a1a;overflow-y:auto;padding:4px 8px;font-size:10px}
-.log div{border-bottom:1px solid #0a0a0a;padding:2px 0}
-.log .e{color:#f00}.log .o{color:#0f0}.log .w{color:#ff0}.log .i{color:#0af}
-.main{flex:1;display:flex}
-.preview{flex:1}
+.top .ent{color:#0a0;margin-left:auto}
+.log{height:100px;background:#050505;border-bottom:1px solid #1a1a1a;overflow-y:auto;padding:4px 8px;font-size:10px}
+.log div{padding:1px 0}
+.log .e{color:#f00}.log .o{color:#0f0}.log .w{color:#ff0}.log .i{color:#0af}.log .p{color:#a0f}
+.main{flex:1;display:flex;min-height:0}
+.preview{flex:1;min-width:0}
 .preview iframe{width:100%;height:100%;border:none;background:#111}
-.code{width:400px;background:#0a0a0a;border-left:1px solid #1a1a1a;overflow:auto;padding:8px;font-size:9px;display:none}
+.side{width:300px;background:#0a0a0a;border-left:1px solid #1a1a1a;display:flex;flex-direction:column;font-size:10px}
+.side.hide{display:none}
+.side h3{padding:8px;background:#111;border-bottom:1px solid #1a1a1a;font-size:10px}
+.patterns{flex:1;overflow-y:auto;padding:8px}
+.pattern{padding:4px;margin:2px 0;background:#111;border-left:2px solid #333}
+.pattern.good{border-color:#0f0}
+.pattern.bad{border-color:#f00}
+.tools{max-height:200px;overflow-y:auto;padding:8px;border-top:1px solid #1a1a1a}
+.tool{padding:2px 4px;margin:1px 0;background:#0a0a0a}
+.code{flex:1;overflow:auto;padding:8px;border-top:1px solid #1a1a1a;display:none}
 .code.show{display:block}
 .status{padding:4px 8px;background:#0a0a0a;border-top:1px solid #1a1a1a;font-size:10px;color:#666;display:flex;gap:16px}
 </style>
@@ -25,22 +35,31 @@ body{background:#000;color:#0f0;font:11px/1.4 monospace;height:100vh;display:fle
 <body>
 <div class="top">
 <button id="gen">⚡ GENERATE</button>
-<button id="iter">🔄 ITERATE</button>
-<button id="fix">🔧 FIX</button>
-<button id="exp">📦 EXPORT</button>
-<button id="cod">{ }</button>
+<button id="iter" class="sec">🔄 ITERATE</button>
+<button id="fix" class="sec">🔧 AUTO-FIX</button>
+<button id="learn" class="sec">📊 LEARN</button>
+<button id="exp" class="sec">📦</button>
+<button id="cod" class="sec">{ }</button>
+<button id="side" class="sec">◧</button>
 <select id="mdl">
 <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama-3.2-3B</option>
+<option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5-3B</option>
 <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B</option>
-<option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B</option>
-<option value="SmolLM2-1.7B-Instruct-q4f16_1-MLC">SmolLM2-1.7B</option>
+<option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi-3.5-mini</option>
 </select>
-<span class="ent">e:<span id="e">0.0000</span></span>
+<span class="ent">e:<span id="e">0.0000</span> | gen:<span id="gn">0</span></span>
 </div>
 <div class="log" id="log"></div>
 <div class="main">
-<div class="preview"><iframe id="frame"></iframe></div>
+<div class="preview"><iframe id="frame" sandbox="allow-scripts allow-modals"></iframe></div>
+<div class="side" id="sidePanel">
+<h3>🔧 Built-in Tools</h3>
+<div class="tools" id="tools"></div>
+<h3>📊 Learned Patterns</h3>
+<div class="patterns" id="patterns"></div>
+<h3>{ } Source</h3>
 <div class="code" id="code"></div>
+</div>
 </div>
 <div class="status">
 <span id="mdls">model: loading...</span>
@@ -49,152 +68,266 @@ body{background:#000;color:#0f0;font:11px/1.4 monospace;height:100vh;display:fle
 <script type="module">
 import*as llm from'https://esm.run/@mlc-ai/web-llm';
 
-let eng=null,src='',errs=[],generating=false;
+let eng=null,src='',errs=[],generating=false,genCount=0;
 
-// Architecture patterns (token compressed)
-const ARCH=`
-UDT:uuid,version,tokens,path,parent,deps,tags
-COMPONENTS:header,nav,main,aside,footer,modal,card,list,form,chart,table,grid
-PATTERNS:crud,dashboard,wizard,feed,gallery,editor,player,game,chat,poll
-LAYOUTS:single,split,grid,stack,sidebar,tabs,accordion
-INPUTS:text,number,range,toggle,select,radio,checkbox,file,color,date
-ACTIONS:click,submit,drag,swipe,hover,focus,scroll,resize
-STATE:local,session,memory,sync,async,stream
-STYLE:dark,light,neon,minimal,brutalist,glass,retro,cyber
+// Built-in tools library (injected into generated apps)
+const TOOLS=`
+// Genesis Tools v1
+const G={
+  // State management
+  state:new Proxy({},{
+    set(t,k,v){t[k]=v;G.emit('state:'+k,v);return true}
+  }),
+  subs:{},
+  on(e,fn){(this.subs[e]=this.subs[e]||[]).push(fn)},
+  emit(e,d){(this.subs[e]||[]).forEach(fn=>fn(d))},
+
+  // Storage
+  save(k,v){localStorage.setItem('g_'+k,JSON.stringify(v))},
+  load(k,d=null){try{return JSON.parse(localStorage.getItem('g_'+k))||d}catch{return d}},
+
+  // DOM helpers
+  $(s){return document.querySelector(s)},
+  $$(s){return[...document.querySelectorAll(s)]},
+  el(tag,props={},children=[]){
+    const e=document.createElement(tag);
+    Object.entries(props).forEach(([k,v])=>k==='on'?Object.entries(v).forEach(([ev,fn])=>e.addEventListener(ev,fn)):k==='style'&&typeof v==='object'?Object.assign(e.style,v):e[k]=v);
+    children.forEach(c=>e.append(typeof c==='string'?document.createTextNode(c):c));
+    return e
+  },
+
+  // Entropy
+  entropy(){let a=0;for(let i=0;i<50;i++)a+=(performance.now()*1e6)%1;return a/50},
+  pick(arr){return arr[Math.floor(this.entropy()*arr.length)]},
+  rng(min,max){return Math.floor(min+this.entropy()*(max-min+1))},
+
+  // Animation
+  anim(el,keyframes,opts={}){return el.animate(keyframes,{duration:300,fill:'forwards',...opts})},
+
+  // Fetch wrapper
+  async fetch(url,opts={}){try{const r=await fetch(url,opts);return r.json()}catch(e){return{error:e.message}}},
+
+  // Timer
+  every(ms,fn){return setInterval(fn,ms)},
+  after(ms,fn){return setTimeout(fn,ms)},
+
+  // Debug
+  log(...a){console.log('[G]',...a)},
+
+  // Render helper
+  render(target,html){const t=typeof target==='string'?this.$(target):target;if(t)t.innerHTML=html}
+};
+window.G=G;
 `;
 
-// ISA-style instruction set
-const ISA=`
-RENDER(el,props):create element with properties
-BIND(state,el):two-way data binding
-ON(event,handler):attach event listener
-FETCH(url,cb):async data fetch
-STORE(key,val):persist to localStorage
-LOAD(key):read from localStorage
-LOOP(arr,template):render array items
-COND(test,a,b):conditional render
-ANIM(el,keyframes,opts):animate element
-TIMER(fn,ms):interval/timeout
-RNG():entropy random 0-1
-PICK(arr):entropy select from array
-`;
+const TOOLS_DESC=[
+{n:'G.state',d:'Reactive state proxy with auto-emit'},
+{n:'G.on(event,fn)',d:'Subscribe to events'},
+{n:'G.emit(event,data)',d:'Emit event'},
+{n:'G.save(key,val)',d:'Persist to localStorage'},
+{n:'G.load(key,default)',d:'Load from localStorage'},
+{n:'G.$(selector)',d:'Query single element'},
+{n:'G.$$(selector)',d:'Query all elements'},
+{n:'G.el(tag,props,children)',d:'Create element'},
+{n:'G.entropy()',d:'Get entropy 0-1'},
+{n:'G.pick(array)',d:'Entropy pick from array'},
+{n:'G.rng(min,max)',d:'Entropy random int'},
+{n:'G.anim(el,keyframes,opts)',d:'Animate element'},
+{n:'G.fetch(url,opts)',d:'Async fetch JSON'},
+{n:'G.every(ms,fn)',d:'Interval'},
+{n:'G.after(ms,fn)',d:'Timeout'},
+{n:'G.render(target,html)',d:'Set innerHTML'}
+];
 
-const log=(m,t='')=>{const d=document.getElementById('log');d.innerHTML=`<div class="${t}">${new Date().toLocaleTimeString().slice(0,8)} ${m}</div>`+d.innerHTML;d.scrollTop=0};
+// Pattern learning
+let patterns=JSON.parse(localStorage.getItem('genesis_patterns')||'[]');
+
+const ARCH=`UDT{uuid,version,tokens,path,deps,tags}
+COMP:header,nav,main,sidebar,footer,modal,card,list,form,chart,grid,table,tabs
+PATTERN:crud,dashboard,wizard,feed,gallery,editor,player,game,chat,kanban,poll,search
+LAYOUT:single,split,holy-grail,sidebar-left,sidebar-right,masonry,tabs
+INPUT:text,number,range,toggle,select,multi,date,color,file
+ACTION:click,dblclick,drag,drop,swipe,hover,focus,keydown
+STATE:reactive,persist,sync,stream
+STYLE:dark,neon,glass,minimal,brutalist,retro,cyber,organic`;
+
+const ISA=`RENDER(sel,html):set innerHTML
+BIND(state,el,prop):two-way bind
+ON(el,event,fn):add listener
+LOOP(arr,tmpl):map array to elements
+COND(test,a,b):conditional
+STORE(k,v):localStorage set
+LOAD(k):localStorage get
+ANIM(el,frames):animate
+FETCH(url):async get JSON
+TIMER(fn,ms):setInterval
+RNG(min,max):entropy random
+PICK(arr):entropy select`;
+
+// Render tools panel
+document.getElementById('tools').innerHTML=TOOLS_DESC.map(t=>`<div class="tool"><b>${t.n}</b> ${t.d}</div>`).join('');
+
+const renderPatterns=()=>{
+document.getElementById('patterns').innerHTML=patterns.slice(-20).map(p=>
+`<div class="pattern ${p.success?'good':'bad'}">${p.seed.pattern}/${p.seed.layout} ${p.success?'✓':'✗'} ${p.errors||''}</div>`
+).join('');
+};
+renderPatterns();
+
+const log=(m,t='')=>{const d=document.getElementById('log');d.innerHTML=`<div class="${t}">${new Date().toLocaleTimeString().slice(0,8)} ${m}</div>`+d.innerHTML;if(d.children.length>50)d.lastChild.remove()};
 
 const entropy=()=>{let a=0;for(let i=0;i<100;i++)a+=(performance.now()*1e6)%1;return(a/100+(Date.now()%1000)/1000)/2};
 const ent=()=>{const e=entropy();document.getElementById('e').textContent=e.toFixed(4);return e};
 const pick=arr=>arr[Math.floor(ent()*arr.length)];
 const rng=(min,max)=>Math.floor(min+ent()*(max-min+1));
 
-// Generate entropy seed for this generation
+// Learn from patterns what works
+const getGoodPatterns=()=>patterns.filter(p=>p.success).slice(-10);
+const getBadPatterns=()=>patterns.filter(p=>!p.success).slice(-5);
+
 const genSeed=()=>{
-const pattern=pick(['crud','dashboard','wizard','feed','gallery','editor','player','game','chat','poll','tool','viz']);
-const layout=pick(['single','split','grid','sidebar','tabs']);
-const style=pick(['dark','light','neon','minimal','brutalist','glass','cyber']);
+const pattern=pick(['crud','dashboard','wizard','feed','gallery','editor','player','game','chat','kanban','poll','search','tool','viz','tracker']);
+const layout=pick(['single','split','holy-grail','sidebar','tabs','masonry']);
+const style=pick(['dark','neon','glass','minimal','brutalist','cyber']);
 const primary=`hsl(${rng(0,360)},${rng(50,80)}%,${rng(40,60)}%)`;
-const components=rng(2,5);
-const interactive=ent()>0.4;
-const animated=ent()>0.5;
-return{pattern,layout,style,primary,components,interactive,animated,entropy:ent()};
+const secondary=`hsl(${rng(0,360)},${rng(30,50)}%,${rng(20,35)}%)`;
+const components=rng(2,6);
+const interactive=ent()>0.3;
+const animated=ent()>0.4;
+const useTools=ent()>0.3;
+return{pattern,layout,style,primary,secondary,components,interactive,animated,useTools,entropy:ent()};
 };
 
-// Build prompt from entropy
-const buildPrompt=(seed,prev='')=>{
-const iterateCtx=prev?`\nPREVIOUS VERSION:\n${prev.slice(0,800)}\nIMPROVE: add features, fix bugs, enhance UX.\n`:'';
-return`You are a code generator. Output ONLY valid HTML. No explanation.
+const buildPrompt=(seed,iterate=false)=>{
+const goodEx=getGoodPatterns().map(p=>`✓ ${p.seed.pattern}/${p.seed.layout}`).join(', ');
+const badEx=getBadPatterns().map(p=>`✗ ${p.seed.pattern}: ${p.errors}`).join(', ');
+const learnCtx=goodEx?`\nWORKED: ${goodEx}`:'';
+const avoidCtx=badEx?`\nAVOID: ${badEx}`:'';
+const iterCtx=iterate&&src?`\nPREVIOUS:\n${src.slice(0,600)}\nIMPROVE IT.`:'';
+const toolsCtx=seed.useTools?`\nUSE G.* tools (G.state, G.$, G.el, G.pick, G.save/load, G.anim, G.render)`:'';
 
-ARCHITECTURE:
-${ARCH}
-ISA:
-${ISA}
+return`CODE GENERATOR. Output ONLY HTML. No markdown. No explanation.
 
-ENTROPY SEED:
-pattern:${seed.pattern}
-layout:${seed.layout}
-style:${seed.style}
-primary:${seed.primary}
-components:${seed.components}
-interactive:${seed.interactive}
-animated:${seed.animated}
+ARCH: ${ARCH}
+ISA: ${ISA}
+${toolsCtx}
+${learnCtx}${avoidCtx}
+
+SEED:
+pattern:${seed.pattern} layout:${seed.layout} style:${seed.style}
+colors:${seed.primary},${seed.secondary}
+components:${seed.components} interactive:${seed.interactive} animated:${seed.animated}
 entropy:${seed.entropy.toFixed(6)}
-${iterateCtx}
-Generate a complete, functional single-file HTML application.
-- Working JavaScript (ES6+)
-- Responsive CSS
-- Real interactivity (buttons work, forms submit, state updates)
-- Use the entropy values to influence randomness in the app
-- Dark background (#0a0a0a), primary color ${seed.primary}
-- No external dependencies except CDN libs if needed
-- Include inline CSS and JS
-- Start with <!DOCTYPE html>
+${iterCtx}
 
-OUTPUT HTML:`;
+RULES:
+- Single HTML file, inline CSS+JS
+- Background ${seed.secondary}, accent ${seed.primary}
+- WORKING interactivity (buttons,forms,state)
+- Use unique variable names (prefix with app_)
+- No duplicate declarations
+- ES6+, modern CSS
+
+<!DOCTYPE html>`;
 };
 
-// Load model
 const loadModel=async()=>{
-const modelId=document.getElementById('mdl').value;
+const id=document.getElementById('mdl').value;
 document.getElementById('mdls').textContent='model: loading...';
 document.getElementById('mdls').style.color='#ff0';
-log(`loading ${modelId}...`,'w');
+log(`loading ${id}...`,'w');
 try{
-eng=await llm.CreateMLCEngine(modelId,{
-initProgressCallback:p=>document.getElementById('mdls').textContent=p.text||'loading...'
-});
-document.getElementById('mdls').textContent=`model: ${modelId.split('-')[0]}`;
+eng=await llm.CreateMLCEngine(id,{initProgressCallback:p=>document.getElementById('mdls').textContent=p.text||'...'});
+document.getElementById('mdls').textContent=`model: ${id.split('-').slice(0,2).join('-')}`;
 document.getElementById('mdls').style.color='#0f0';
 log('model ready','o');
 }catch(e){
-document.getElementById('mdls').textContent='model: failed';
+document.getElementById('mdls').textContent='model failed';
 document.getElementById('mdls').style.color='#f00';
-log('model failed: '+e.message,'e');
+log('model: '+e.message,'e');
 }
 };
 
 document.getElementById('mdl').onchange=loadModel;
 
-// Generate
+// Inject tools into generated code
+const injectTools=(code)=>{
+if(!code.includes('<script'))return code;
+// Add tools before first script
+const idx=code.indexOf('<script');
+return code.slice(0,idx)+`<script>${TOOLS}<\/script>`+code.slice(idx);
+};
+
+// Fix common issues
+const autoFix=(code)=>{
+// Fix duplicate variable declarations
+const seen=new Set();
+code=code.replace(/\b(const|let|var)\s+(\w+)\s*=/g,(m,decl,name)=>{
+if(seen.has(name))return`${name} =`;
+seen.add(name);
+return m;
+});
+// Fix unclosed tags
+if(!code.includes('</body>'))code=code.replace(/<\/html>/,'</body></html>');
+if(!code.includes('</head>'))code=code.replace(/<body/,'</head><body');
+return code;
+};
+
 const generate=async(iterate=false)=>{
 if(generating||!eng)return;
 generating=true;
-document.getElementById('gen').disabled=true;
-document.getElementById('iter').disabled=true;
+document.querySelectorAll('.top button').forEach(b=>b.disabled=true);
 
 const seed=genSeed();
-log(`generating: ${seed.pattern}/${seed.layout}/${seed.style}`,'i');
+genCount++;
+document.getElementById('gn').textContent=genCount;
+log(`gen #${genCount}: ${seed.pattern}/${seed.layout}/${seed.style}`,'i');
 const t0=performance.now();
-
-const prompt=buildPrompt(seed,iterate?src:'');
 
 try{
 const r=await eng.chat.completions.create({
-messages:[{role:'user',content:prompt}],
+messages:[{role:'user',content:buildPrompt(seed,iterate)}],
 max_tokens:4000,
-temperature:0.8+ent()*0.2
+temperature:0.7+ent()*0.3
 });
 
 let code=r.choices[0]?.message?.content||'';
 code=code.replace(/```\w*\n?/g,'').trim();
-const idx=code.indexOf('<!DOCTYPE');
-if(idx>=0)code=code.slice(idx);
-else if(code.indexOf('<html')>=0)code='<!DOCTYPE html>'+code.slice(code.indexOf('<html'));
+if(!code.startsWith('<!'))code=code.slice(code.indexOf('<!'));
+
+// Auto-fix common issues
+code=autoFix(code);
+
+// Inject tools if seed says so
+if(seed.useTools)code=injectTools(code);
 
 src=code;
 render();
 
 const time=((performance.now()-t0)/1000).toFixed(1);
 const tokens=r.usage?.total_tokens||0;
-document.getElementById('stats').textContent=`${time}s | ${tokens} tokens | ${seed.pattern}`;
-log(`generated in ${time}s (${tokens} tokens)`,'o');
+document.getElementById('stats').textContent=`${time}s | ${tokens}tok | ${seed.pattern}`;
+log(`done: ${time}s, ${tokens} tokens`,'o');
 
-testApp();
+// Test and learn
+const result=await testApp();
+patterns.push({seed,success:result.success,errors:result.errors.slice(0,50),time:Date.now()});
+if(patterns.length>100)patterns=patterns.slice(-100);
+localStorage.setItem('genesis_patterns',JSON.stringify(patterns));
+renderPatterns();
+
+// Auto-fix if errors
+if(!result.success&&errs.length>0){
+log('auto-fixing...','w');
+await fix();
+}
+
 }catch(e){
-log('generation failed: '+e.message,'e');
+log('gen failed: '+e.message,'e');
 }
 
 generating=false;
-document.getElementById('gen').disabled=false;
-document.getElementById('iter').disabled=false;
+document.querySelectorAll('.top button').forEach(b=>b.disabled=false);
 };
 
 const render=()=>{
@@ -202,52 +335,79 @@ document.getElementById('frame').srcdoc=src;
 document.getElementById('code').textContent=src;
 };
 
-// Self-test
-const testApp=()=>{
+const testApp=()=>new Promise(resolve=>{
 errs=[];
 const frame=document.getElementById('frame');
+const timeout=setTimeout(()=>resolve({success:errs.length===0,errors:errs.join('; ')}),2000);
+
 frame.onload=()=>{
+clearTimeout(timeout);
 try{
 const doc=frame.contentDocument;
-if(!doc.body||!doc.body.innerHTML.trim()){errs.push('empty');log('empty body','e')}
+if(!doc.body?.innerHTML?.trim()){errs.push('empty');log('empty body','e')}
+
 doc.querySelectorAll('script').forEach((s,i)=>{
-try{new Function(s.textContent)}catch(e){errs.push(e.message);log(`js error: ${e.message}`,'e')}
+if(s.src)return;
+try{new Function(s.textContent)}catch(e){
+errs.push(e.message.slice(0,40));
+log(`js[${i}]: ${e.message.slice(0,50)}`,'e');
+}
 });
-if(errs.length===0)log('tests passed','o');
-}catch(e){log('test failed: '+e.message,'e')}
-};
+
+if(errs.length===0)log('✓ tests passed','o');
+}catch(e){log('test err: '+e.message,'e');errs.push(e.message)}
+
+resolve({success:errs.length===0,errors:errs.join('; ')});
 };
 
-// Fix with LLM
+frame.onerror=()=>{errs.push('frame error');resolve({success:false,errors:'frame error'})};
+});
+
 const fix=async()=>{
 if(!eng||errs.length===0){log('nothing to fix','w');return}
-log('fixing...','w');
-const prompt=`Fix these errors in the HTML: ${errs.join('; ')}\n\nCode:\n${src.slice(0,2000)}\n\nReturn ONLY fixed HTML starting with <!DOCTYPE html>:`;
+log('fixing: '+errs.join(', '),'w');
+
+const prompt=`Fix these JS errors: ${errs.join('; ')}
+
+COMMON FIXES:
+- Duplicate declaration: remove const/let/var
+- Undefined: declare variable first
+- Syntax: check brackets/quotes
+
+Code:
+${src.slice(0,2500)}
+
+Return ONLY fixed HTML starting <!DOCTYPE html>:`;
+
 try{
-const r=await eng.chat.completions.create({messages:[{role:'user',content:prompt}],max_tokens:4000,temperature:0.3});
+const r=await eng.chat.completions.create({messages:[{role:'user',content:prompt}],max_tokens:4000,temperature:0.2});
 let fixed=r.choices[0]?.message?.content||'';
 fixed=fixed.replace(/```\w*\n?/g,'').trim();
-if(fixed.includes('<!DOCTYPE')){src=fixed.slice(fixed.indexOf('<!'));render();log('fix applied','o');testApp()}
+if(fixed.includes('<!DOCTYPE')){
+src=autoFix(fixed.slice(fixed.indexOf('<!')));
+render();
+log('fix applied','o');
+await testApp();
+}
 }catch(e){log('fix failed: '+e.message,'e')}
 };
 
-// Export
-const exp=()=>{
-if(!src)return;
-const b=new Blob([src],{type:'text/html'});
-const a=document.createElement('a');
-a.href=URL.createObjectURL(b);
-a.download=`genesis-${Date.now()}.html`;
-a.click();
-log('exported','o');
+const learn=()=>{
+const good=patterns.filter(p=>p.success).length;
+const bad=patterns.filter(p=>!p.success).length;
+const rate=patterns.length?(good/patterns.length*100).toFixed(0):0;
+log(`patterns: ${patterns.length} | success: ${good} (${rate}%) | fail: ${bad}`,'p');
+const topPatterns=patterns.filter(p=>p.success).reduce((acc,p)=>{acc[p.seed.pattern]=(acc[p.seed.pattern]||0)+1;return acc},{});
+log('best: '+Object.entries(topPatterns).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${k}(${v})`).join(' '),'p');
 };
 
-// Events
 document.getElementById('gen').onclick=()=>generate(false);
 document.getElementById('iter').onclick=()=>generate(true);
 document.getElementById('fix').onclick=fix;
-document.getElementById('exp').onclick=exp;
+document.getElementById('learn').onclick=learn;
+document.getElementById('exp').onclick=()=>{if(!src)return;const b=new Blob([src],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`genesis-${genCount}.html`;a.click()};
 document.getElementById('cod').onclick=()=>document.getElementById('code').classList.toggle('show');
+document.getElementById('side').onclick=()=>document.getElementById('sidePanel').classList.toggle('hide');
 
 setInterval(ent,200);
 loadModel();
